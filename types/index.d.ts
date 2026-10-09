@@ -15,6 +15,7 @@ export type Preview =
       note?: string
       caption?: string
       size?: Size
+      isTest?: true
     }
   | { kind: 'unsupported'; source: string; reason: string; caption?: string }
 

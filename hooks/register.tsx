@@ -191,12 +191,57 @@ type Transport = 'file' | 'bytes'
 let transport: Transport | undefined
 let transportSetting: unknown = 'auto'
 
+// What the terminal showed when the plugin drew a one-cell picture in the band
+// above the prompt at session start and swapped it: Claude Code refuses a swap
+// onto a picture it is drawing as alt text, and says why.
+type Probe = {
+  phase: 'idle' | 'drawing' | 'done'
+  bandId?: string
+  verdict?: Transport | 'none'
+  reason?: string
+}
+const probe: Probe = { phase: 'idle' }
+const PROBE_BYTES =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+
+async function runProbe($: EngineInterface, attempt = 0) {
+  if (probe.bandId === undefined) {
+    if (attempt < 10) {
+      $.clock.after(300, () => void runProbe($, attempt + 1))
+    } else {
+      probe.phase = 'done'
+    }
+    return
+  }
+  const site = { requestId: probe.bandId, key: 'probe' }
+  const byFile = await $.ui
+    .blit({ ...site, source: { file: `${$.plugin.root}/bin/probe.png`, format: 'png' } })
+    .catch((err: Error) => ({ deny: err.message }))
+  if (byFile.deny === undefined) {
+    probe.verdict = 'file'
+  } else {
+    const byBytes = await $.ui
+      .blit({ ...site, source: { png: PROBE_BYTES } })
+      .catch((err: Error) => ({ deny: err.message }))
+    probe.verdict = byBytes.deny === undefined ? 'bytes' : 'none'
+    probe.reason = byBytes.deny ?? byFile.deny
+  }
+  probe.phase = 'done'
+  transport = undefined
+  $.ui.invalidate('ui.render')
+  await $.fs
+    .write('/tmp/asset-viewer-probe.json', JSON.stringify({ ...probe, file: byFile.deny ?? 'ok' }, null, 1))
+    .catch(() => undefined)
+}
+
 async function transportOf($: EngineInterface): Promise<Transport> {
   if (transport !== undefined) {
     return transport
   }
   if (transportSetting === 'file' || transportSetting === 'bytes') {
     transport = transportSetting
+  } else if (probe.verdict === 'file' || probe.verdict === 'bytes') {
+    transport = probe.verdict
   } else {
     try {
       const remote = (await $.env.get('SSH_CONNECTION')) ?? (await $.env.get('SSH_TTY'))
@@ -365,6 +410,10 @@ export const register: Register = (on, options: PluginOptions) => {
 
   on('session.start', async ($, e, next) => {
     const result = await next(e)
+    probe.phase = 'drawing'
+    probe.bandId = undefined
+    $.ui.invalidate('ui.render')
+    $.clock.after(400, () => void runProbe($))
     await $.tool.register({
       name: TOOL,
       description:
@@ -383,8 +432,10 @@ export const register: Register = (on, options: PluginOptions) => {
           size: { type: 'string', enum: ['small', 'medium', 'large'], description: 'Default medium' },
           mode: {
             type: 'string',
-            enum: ['inline', 'viewer'],
-            description: 'inline (default): in the conversation. viewer: open the paging viewer pane',
+            enum: ['inline', 'viewer', 'test'],
+            description:
+              'inline (default): in the conversation. viewer: open the paging viewer pane. ' +
+              'test: draw the file four ways side by side to debug a terminal that shows placeholders',
           },
         },
         required: ['path'],
@@ -421,7 +472,7 @@ export const register: Register = (on, options: PluginOptions) => {
       page?: number
       caption?: string
       size?: Size
-      mode?: 'inline' | 'viewer'
+      mode?: 'inline' | 'viewer' | 'test'
     }
     const value = await preview($, input.path, input.page ?? 1)
     if (value.kind === 'unsupported') {
@@ -429,7 +480,12 @@ export const register: Register = (on, options: PluginOptions) => {
 
       return { result: unsupportedText(value) }
     }
-    const shown: ImagePreview = { ...value, caption: input.caption, size: input.size }
+    const shown: ImagePreview = {
+      ...value,
+      caption: input.caption,
+      size: input.size,
+      ...(input.mode === 'test' ? { isTest: true } : {}),
+    }
     await remember($, e.tool_use_id, shown)
     if (input.mode === 'viewer') {
       await openViewer($, shown)
@@ -439,6 +495,15 @@ export const register: Register = (on, options: PluginOptions) => {
     const where = shown.pages > 1 ? ` (page ${shown.page} of ${shown.pages})` : ''
     const how = input.mode === 'viewer' ? ' in the viewer pane' : ''
     const note = shown.note ? ` Note: ${shown.note}.` : ''
+
+    if (probe.verdict === 'none') {
+      return {
+        result:
+          `The user's terminal can't draw pictures (${probe.reason ?? 'no kitty graphics'}), so they saw only ` +
+          `a one-line placeholder for ${input.path}${where}, not the picture. Tell them, and describe what ` +
+          'matters in the file in words if that helps. Pictures need Ghostty or kitty, run outside tmux.',
+      }
+    }
 
     return { result: `Shown to the user${how}: ${input.path}${where}.${note}` }
   })
@@ -455,6 +520,16 @@ export const register: Register = (on, options: PluginOptions) => {
 
     return ran
   }).catch(($, e, next) => next(e))
+
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (probe.phase !== 'drawing' || e.surface !== 'terminal') {
+      return next(e)
+    }
+    probe.bandId = e.requestId
+    const { Image } = $.ui.resolve(e)
+
+    return <Image key="probe" source={{ png: PROBE_BYTES }} columns={1} rows={1} alt=" " />
+  })
 
   on('ui.render', { component: 'ToolResult' }, async ($, e, next) => {
     if (e.props.isErrored || (e.props.tool !== 'Read' && e.props.tool !== FULL_TOOL)) {
@@ -480,6 +555,38 @@ export const register: Register = (on, options: PluginOptions) => {
           </Text>
           <Text dimColor>{value.reason}</Text>
           <Text dimColor>Supported: {SUPPORTED}</Text>
+        </Box>
+      )
+    }
+
+    if (value.isTest) {
+      const bytes = (await $.fs.read(value.png, { as: 'bytes' })).base64
+      const cell = boxFor(value, 22, 8, 22)
+      const variants = [
+        { key: 'A', label: 'A plain · file', framed: false, source: { file: value.png, format: 'png' } as const },
+        { key: 'B', label: 'B plain · bytes', framed: false, source: { png: bytes } },
+        { key: 'C', label: 'C card · file', framed: true, source: { file: value.png, format: 'png' } as const },
+        { key: 'D', label: 'D card · bytes', framed: true, source: { png: bytes } },
+      ]
+
+      return (
+        <Box flexDirection="column">
+          <Text dimColor>
+            asset-viewer test · probe: {probe.verdict ?? probe.phase}
+            {probe.reason ? ` (${probe.reason})` : ''} · transport: {await transportOf($)}
+          </Text>
+          <Box flexDirection="row" gap={2}>
+            {variants.map(v => (
+              <Box
+                key={`v${v.key}`}
+                flexDirection="column"
+                {...(v.framed ? { borderStyle: 'round', borderColor: 'subtle', paddingX: 1 } : {})}
+              >
+                <Text dimColor>{v.label}</Text>
+                <Image key={`img${v.key}`} source={v.source} columns={cell.columns} rows={cell.rows} alt={`[${v.key}: placeholder]`} />
+              </Box>
+            ))}
+          </Box>
         </Box>
       )
     }

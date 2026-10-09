@@ -1,6 +1,6 @@
 #!/bin/sh
-# render.sh <source> <page> <cache dir>
-# Turns an asset into a PNG the terminal can draw.
+# render.sh <source> <page> [cache dir]
+# Turns an asset into a PNG the terminal can draw. Runs on macOS and Linux.
 # Prints one line, tab separated:
 #   png  width  height  pages  page  source  frames  note
 # frames is the path of a list of "png<TAB>delay ms" lines for an animation, or "-".
@@ -8,7 +8,16 @@
 set -e
 src=$1
 page=${2:-1}
-cache=$3
+cache=${3:-}
+os=$(uname -s)
+
+if [ -z "$cache" ]; then
+  if [ "$os" = Darwin ]; then
+    cache="$HOME/Library/Caches/asset-viewer"
+  else
+    cache="${XDG_CACHE_HOME:-$HOME/.cache}/asset-viewer"
+  fi
+fi
 # A literal "~/" from the caller, expanded here.
 # shellcheck disable=SC2088
 case "$cache" in "~/"*) cache="$HOME/${cache#\~/}" ;; esac
@@ -18,13 +27,21 @@ case "$src" in "~/"*) src="$HOME/${src#\~/}" ;; esac
 [ -f "$src" ] || { echo "no such file: $src" >&2; exit 2; }
 src="$(cd "$(dirname "$src")" && pwd)/$(basename "$src")"
 
-ext=$(printf '%s' "${src##*.}" | tr '[:upper:]' '[:lower:]')
-mtime=$(stat -f %m "$src")
-doc=$(md5 -q -s "$src:$mtime")
-out="$cache/$doc-p$page.png"
-pages=1
-frames=-
-note=-
+has() { command -v "$1" >/dev/null 2>&1; }
+
+# ImageMagick 7 is `magick`; distributions that still ship 6 have `convert`.
+im() {
+  if has magick; then magick "$@"; else convert "$@"; fi
+}
+im_identify() {
+  if has magick; then magick identify "$@"; else identify "$@"; fi
+}
+
+mtime_of() { stat -f %m "$1" 2>/dev/null || stat -c %Y "$1"; }
+
+hash_of() {
+  if has md5; then md5 -q -s "$1"; else printf '%s' "$1" | md5sum | cut -d' ' -f1; fi
+}
 
 # Prints the first of its arguments that exists, so a glob that matched nothing fails.
 first() {
@@ -32,6 +49,45 @@ first() {
     [ -e "$f" ] && { printf '%s' "$f"; return 0; }
   done
   return 1
+}
+
+need() {
+  has "$1" || { echo "previewing .$ext needs $1 ($2)" >&2; exit 4; }
+}
+
+ext=$(printf '%s' "${src##*.}" | tr '[:upper:]' '[:lower:]')
+doc=$(hash_of "$src:$(mtime_of "$src")")
+out="$cache/$doc-p$page.png"
+pages=1
+frames=-
+note=-
+
+# Any still image to a PNG at most 1600 px on its long side.
+to_png() {
+  [ -f "$2" ] && return 0
+  if has sips; then
+    # sips also enlarges small images, so only resample ones over the limit.
+    long=$(sips -g pixelWidth -g pixelHeight "$1" | awk '/pixel(Width|Height)/ { if ($2 > m) m = $2 } END { print m + 0 }')
+    if [ "$long" -gt 1600 ]; then
+      sips -s format png --resampleHeightWidthMax 1600 "$1" --out "$2" >/dev/null
+    else
+      sips -s format png "$1" --out "$2" >/dev/null
+    fi
+  else
+    has magick || has convert || { echo "previewing .$ext needs ImageMagick" >&2; exit 4; }
+    im "$1[0]" -auto-orient -resize '1600x1600>' "$2"
+  fi
+}
+
+size_of() {
+  if has sips; then
+    w=$(sips -g pixelWidth "$1" | awk '/pixelWidth/ {print $2}')
+    h=$(sips -g pixelHeight "$1" | awk '/pixelHeight/ {print $2}')
+  else
+    set -- "$(im_identify -format '%w %h' "$1")"
+    w=${1% *}
+    h=${1#* }
+  fi
 }
 
 chrome() {
@@ -43,7 +99,9 @@ chrome() {
 }
 
 soffice_bin() {
-  command -v soffice 2>/dev/null && return 0
+  for bin in soffice libreoffice; do
+    has "$bin" && { command -v "$bin"; return 0; }
+  done
   [ -x /Applications/LibreOffice.app/Contents/MacOS/soffice ] && {
     printf '%s' /Applications/LibreOffice.app/Contents/MacOS/soffice
     return 0
@@ -52,7 +110,7 @@ soffice_bin() {
 }
 
 # Office files become a PDF once: LibreOffice when installed (exact pages),
-# else Quick Look's HTML printed by a headless Chromium (approximate layout).
+# else, on macOS, Quick Look's HTML printed by a headless Chromium (approximate layout).
 office_to_pdf() {
   pdf="$cache/$doc.pdf"
   [ -f "$pdf" ] && return 0
@@ -60,10 +118,11 @@ office_to_pdf() {
   rm -rf "$work"
   mkdir -p "$work"
   if so=$(soffice_bin); then
-    "$so" --headless --convert-to pdf --outdir "$work" "$src" >/dev/null 2>&1 || true
+    "$so" --headless "-env:UserInstallation=file://$work/profile" --convert-to pdf --outdir "$work" "$src" >/dev/null 2>&1 || true
     made=$(first "$work"/*.pdf || true)
     [ -n "$made" ] && { mv "$made" "$pdf"; rm -rf "$work"; return 0; }
   fi
+  has qlmanage || { rm -rf "$work"; return 1; }
   browser=$(chrome) || { rm -rf "$work"; return 1; }
   qlmanage -p -o "$work" "$src" >/dev/null 2>&1 || true
   ql=$(first "$work"/*.qlpreview || true)
@@ -89,6 +148,7 @@ office_to_pdf() {
 }
 
 render_pdf() {
+  need pdftoppm "poppler"
   pages=$(pdfinfo "$1" 2>/dev/null | awk '/^Pages:/ {print $2}')
   pages=${pages:-1}
   [ "$page" -gt "$pages" ] && page=$pages
@@ -98,22 +158,46 @@ render_pdf() {
 
 # Animated images: one PNG per frame, composited, with each frame's delay.
 animate() {
-  count=$(magick identify "$src" 2>/dev/null | wc -l | tr -d ' ')
+  has magick || has convert || return 1
+  count=$(im_identify "$src" 2>/dev/null | wc -l | tr -d ' ')
   [ "${count:-1}" -gt 1 ] || return 1
   dir="$cache/$doc-frames"
   list="$dir/frames.tsv"
   if [ ! -f "$list" ]; then
     rm -rf "$dir"
     mkdir -p "$dir"
-    magick "$src" -coalesce -resize '960x960>' "$dir/f-%04d.png"
+    im "$src" -coalesce -resize '960x960>' "$dir/f-%04d.png"
     n=0
     for f in "$dir"/f-*.png; do n=$((n + 1)); done
-    magick identify -format '%T\n' "$src" | head -n "$n" > "$dir/delays"
+    im_identify -format '%T\n' "$src" | head -n "$n" > "$dir/delays"
     for f in "$dir"/f-*.png; do printf '%s\n' "$f"; done | paste - "$dir/delays" |
       awk -F'\t' '{ d = $2 * 10; if (d < 20) d = 100; print $1 "\t" d }' > "$list"
   fi
   frames=$list
   out=$(head -1 "$list" | cut -f1)
+}
+
+# iWork files are zip archives holding a preview image of their first page.
+iwork_preview() {
+  [ -f "$out" ] && return 0
+  if has qlmanage; then
+    tmp="$cache/ql-$doc"
+    mkdir -p "$tmp"
+    qlmanage -t -s 1400 -o "$tmp" "$src" >/dev/null 2>&1 || true
+    thumb=$(first "$tmp"/*.png || true)
+    [ -n "$thumb" ] && { mv "$thumb" "$out"; rm -rf "$tmp"; return 0; }
+    rm -rf "$tmp"
+  fi
+  has unzip || return 1
+  for name in preview.jpg QuickLook/Thumbnail.jpg; do
+    if unzip -p "$src" "$name" > "$cache/$doc-preview.jpg" 2>/dev/null && [ -s "$cache/$doc-preview.jpg" ]; then
+      to_png "$cache/$doc-preview.jpg" "$out"
+      rm -f "$cache/$doc-preview.jpg"
+      return 0
+    fi
+  done
+  rm -f "$cache/$doc-preview.jpg"
+  return 1
 }
 
 case "$ext" in
@@ -125,40 +209,33 @@ case "$ext" in
       render_pdf "$cache/$doc.pdf"
       [ -f "$cache/$doc.approx" ] &&
         note="approximate layout (Quick Look); install LibreOffice for exact pages"
-    else
+    elif has qlmanage; then
       out="$cache/$doc-p1.png"
       tmp="$cache/ql-$doc"
       mkdir -p "$tmp"
-      qlmanage -t -s 1400 -o "$tmp" "$src" >/dev/null 2>&1
+      qlmanage -t -s 1400 -o "$tmp" "$src" >/dev/null 2>&1 || true
       thumb=$(first "$tmp"/*.png || true)
       [ -n "$thumb" ] || { rm -rf "$tmp"; echo "no preview for .$ext" >&2; exit 3; }
       mv "$thumb" "$out"
       rm -rf "$tmp"
       note="first page only; install LibreOffice or Chrome for every page"
+    else
+      echo "previewing .$ext needs LibreOffice (soffice)" >&2
+      exit 4
     fi
     ;;
   gif|webp|apng)
-    if ! animate; then
-      out="$cache/$doc-p1.png"
-      [ -f "$out" ] || sips -s format png --resampleHeightWidthMax 1600 "$src" --out "$out" >/dev/null
-    fi
+    animate || to_png "$src" "$out"
     ;;
   png|jpg|jpeg|heic|heif|avif|tif|tiff|bmp|psd|tga|ico|icns|jp2|dng|cr2|cr3|nef|arw|raf|orf|rw2)
-    [ -f "$out" ] || sips -s format png --resampleHeightWidthMax 1600 "$src" --out "$out" >/dev/null
+    to_png "$src" "$out"
     ;;
   svg|svgz)
+    need rsvg-convert "librsvg"
     [ -f "$out" ] || rsvg-convert -w 1400 --keep-aspect-ratio -b white "$src" -o "$out"
     ;;
   key|pages|numbers)
-    if [ ! -f "$out" ]; then
-      tmp="$cache/ql-$doc"
-      mkdir -p "$tmp"
-      qlmanage -t -s 1400 -o "$tmp" "$src" >/dev/null 2>&1
-      thumb=$(first "$tmp"/*.png || true)
-      [ -n "$thumb" ] || { rm -rf "$tmp"; echo "no preview for .$ext" >&2; exit 3; }
-      mv "$thumb" "$out"
-      rm -rf "$tmp"
-    fi
+    iwork_preview || { echo "no preview inside this .$ext file" >&2; exit 3; }
     note="first page only (iWork previews hold one page)"
     ;;
   *)
@@ -167,7 +244,20 @@ case "$ext" in
     ;;
 esac
 
+# Keep every PNG under the 2 MiB a terminal accepts as inline bytes.
+bytes=$(wc -c < "$out" | tr -d ' ')
+if [ "$bytes" -gt 1900000 ] && [ "$frames" = - ]; then
+  small="${out%.png}-s.png"
+  if [ ! -f "$small" ]; then
+    if has sips; then
+      sips -s format png --resampleHeightWidthMax 1000 "$out" --out "$small" >/dev/null
+    else
+      im "$out" -resize '1000x1000>' "$small"
+    fi
+  fi
+  out=$small
+fi
+
 [ "$pages" -eq 1 ] && page=1
-w=$(sips -g pixelWidth "$out" | awk '/pixelWidth/ {print $2}')
-h=$(sips -g pixelHeight "$out" | awk '/pixelHeight/ {print $2}')
+size_of "$out"
 printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$out" "$w" "$h" "$pages" "$page" "$src" "$frames" "$note"

@@ -100,13 +100,45 @@ color = sys.stdout.isatty()
 green, red, yellow = (
     ("\033[32m✓\033[0m", "\033[31m✗\033[0m", "\033[33m~\033[0m") if color else ("✓", "✗", "~")
 )
+# Claude Code places pictures with kitty's Unicode placeholders (U=1), which some
+# terminals that answer the query above still don't draw. There's no query for
+# it, so draw one the same way and ask.
+def placeholder_test():
+    import zlib, struct
+    w, h = 32, 16
+    raw = b"".join(b"\x00" + b"".join(bytes((230, 60, 60)) if x < w // 2 else bytes((60, 90, 230)) for x in range(w)) for _ in range(h))
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
+    image = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")
+    payload = base64.b64encode(image).decode()
+    image_id = 77
+    cols, rows_ = 4, 1
+    diacritics = ["\u0305", "\u030d", "\u030e", "\u0310"]
+    out = f"\x1b_Ga=T,q=2,f=100,t=d,U=1,i={image_id},c={cols},r={rows_};{payload}\x1b\\"
+    line = "".join("\U0010EEEE" + diacritics[0] + diacritics[c] for c in range(cols))
+    out += f"    \x1b[38;5;{image_id}m{line}\x1b[39m\n"
+    sys.stdout.write(out)
+    sys.stdout.flush()
+    try:
+        answer = open("/dev/tty").readline().strip().lower()
+    except Exception:
+        answer = ""
+    sys.stdout.write(f"\x1b_Ga=d,d=I,i={image_id},q=2\x1b\\")
+    return answer.startswith("y")
+
 if "i=31;OK" not in text:
     print(f"  {red} No kitty graphics: previews show as a text placeholder.")
     print("    Ghostty, kitty and Warp draw them.")
-elif "i=32;OK" in text:
-    print(f"  {green} Kitty graphics, including local files. Everything works.")
 else:
-    print(f"  {yellow} Kitty graphics, but this terminal won't read local files.")
+    print("  Below should be a small red and blue bar. Do you see it? [y/n] ", end="")
+    if not placeholder_test():
+        print(f"  {red} This terminal answers kitty graphics queries but doesn't draw the")
+        print("    placeholder images Claude Code uses (WezTerm, Konsole and VS Code are known")
+        print("    cases). Previews show as a text placeholder.")
+    elif "i=32;OK" in text:
+        print(f"  {green} Kitty graphics with placeholders and local files. Everything works.")
+    else:
+        print(f"  {yellow} Kitty graphics, but this terminal won't read local files.")
     print("    asset-viewer sends bytes when it detects ssh, Warp or WSL; elsewhere set its")
     print('    "Image transport" option to "bytes" in /config.')
 EOF

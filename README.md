@@ -66,19 +66,18 @@ Text files (code, Markdown, CSV) aren't previewed because Claude Code already sh
 
 Ask for it in plain words: "show me slide 12 of the Bayes nets lecture" or "open my report in the viewer". Claude picks the tool up on its own when a picture would help.
 
-Inline previews have buttons to page (◀ ▶), replay an animation, open the viewer, or open the file in its own app. Clicking them needs a terminal that reports mouse clicks to Claude Code, which fullscreen mode does.
+Each preview is a small card with the file type, name and page count on top and a row of controls under the picture: ◀ ▶ to page, replay for animations, viewer to open the full viewer, and open to hand the file to its own app. Clicking them needs a terminal that reports mouse clicks to Claude Code, which fullscreen mode does.
 
-The viewer pane takes the keyboard while it's open:
+The viewer pane shows the current page large with a sidebar of the pages around it, and takes the keyboard while it's open:
 
 | Key | Does |
 | --- | --- |
-| `n` / `p` | Next or previous page |
-| `f` / `l` | First or last page |
-| `g` | Grid of six thumbnails; `1` to `6` jumps to one |
+| `↑` / `↓` | Previous or next page (the focus walks the sidebar) |
+| `p` / `n` | Previous or next page |
 | `o` | Open the file in its default app |
-| `Esc` or `q` | Close |
+| `Esc` | Close |
 
-There's also a "Go to page" field.
+Clicking a page in the sidebar jumps to it.
 
 ## How it works
 

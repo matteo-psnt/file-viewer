@@ -9,8 +9,11 @@ set -e
 src=$1
 page=${2:-1}
 cache=$3
+# A literal "~/" from the caller, expanded here.
+# shellcheck disable=SC2088
 case "$cache" in "~/"*) cache="$HOME/${cache#\~/}" ;; esac
 mkdir -p "$cache"
+# shellcheck disable=SC2088
 case "$src" in "~/"*) src="$HOME/${src#\~/}" ;; esac
 [ -f "$src" ] || { echo "no such file: $src" >&2; exit 2; }
 src="$(cd "$(dirname "$src")" && pwd)/$(basename "$src")"
@@ -22,6 +25,14 @@ out="$cache/$doc-p$page.png"
 pages=1
 frames=-
 note=-
+
+# Prints the first of its arguments that exists, so a glob that matched nothing fails.
+first() {
+  for f in "$@"; do
+    [ -e "$f" ] && { printf '%s' "$f"; return 0; }
+  done
+  return 1
+}
 
 chrome() {
   for app in "Google Chrome" "Chromium" "Microsoft Edge" "Brave Browser"; do
@@ -50,12 +61,12 @@ office_to_pdf() {
   mkdir -p "$work"
   if so=$(soffice_bin); then
     "$so" --headless --convert-to pdf --outdir "$work" "$src" >/dev/null 2>&1 || true
-    made=$(ls "$work"/*.pdf 2>/dev/null | head -1)
+    made=$(first "$work"/*.pdf || true)
     [ -n "$made" ] && { mv "$made" "$pdf"; rm -rf "$work"; return 0; }
   fi
   browser=$(chrome) || { rm -rf "$work"; return 1; }
   qlmanage -p -o "$work" "$src" >/dev/null 2>&1 || true
-  ql=$(ls -d "$work"/*.qlpreview 2>/dev/null | head -1)
+  ql=$(first "$work"/*.qlpreview || true)
   [ -n "$ql" ] && [ -f "$ql/Preview.html" ] || { rm -rf "$work"; return 1; }
   # Chromium cannot draw a PDF inside <img>: rasterize embedded ones.
   for f in "$ql"/*.pdf; do
@@ -63,6 +74,7 @@ office_to_pdf() {
   done
   size=$(grep -o 'div.slide, div.loading-slide { width: [0-9]*; height: [0-9]*;}' "$ql/Preview.html" | head -1 | grep -o '[0-9][0-9]*' | tr '\n' ' ')
   if [ -n "$size" ]; then
+    # shellcheck disable=SC2086 # split "720 540" into width and height
     set -- $size
     css="@page{size:$(echo "scale=3; $1/96" | bc)in $(echo "scale=3; $2/96" | bc)in;margin:0} html,body{margin:0!important;background:#fff!important} div.slide{margin:0!important;box-shadow:none!important;-webkit-box-shadow:none!important;break-after:page} div.loading-slide{display:none!important}"
   else
@@ -94,8 +106,10 @@ animate() {
     rm -rf "$dir"
     mkdir -p "$dir"
     magick "$src" -coalesce -resize '960x960>' "$dir/f-%04d.png"
-    magick identify -format '%T\n' "$src" | head -n "$(ls "$dir"/f-*.png | wc -l)" > "$dir/delays"
-    ls "$dir"/f-*.png | paste - "$dir/delays" |
+    n=0
+    for f in "$dir"/f-*.png; do n=$((n + 1)); done
+    magick identify -format '%T\n' "$src" | head -n "$n" > "$dir/delays"
+    for f in "$dir"/f-*.png; do printf '%s\n' "$f"; done | paste - "$dir/delays" |
       awk -F'\t' '{ d = $2 * 10; if (d < 20) d = 100; print $1 "\t" d }' > "$list"
   fi
   frames=$list
@@ -116,7 +130,7 @@ case "$ext" in
       tmp="$cache/ql-$doc"
       mkdir -p "$tmp"
       qlmanage -t -s 1400 -o "$tmp" "$src" >/dev/null 2>&1
-      thumb=$(ls "$tmp"/*.png 2>/dev/null | head -1)
+      thumb=$(first "$tmp"/*.png || true)
       [ -n "$thumb" ] || { rm -rf "$tmp"; echo "no preview for .$ext" >&2; exit 3; }
       mv "$thumb" "$out"
       rm -rf "$tmp"
@@ -140,7 +154,7 @@ case "$ext" in
       tmp="$cache/ql-$doc"
       mkdir -p "$tmp"
       qlmanage -t -s 1400 -o "$tmp" "$src" >/dev/null 2>&1
-      thumb=$(ls "$tmp"/*.png 2>/dev/null | head -1)
+      thumb=$(first "$tmp"/*.png || true)
       [ -n "$thumb" ] || { rm -rf "$tmp"; echo "no preview for .$ext" >&2; exit 3; }
       mv "$thumb" "$out"
       rm -rf "$tmp"

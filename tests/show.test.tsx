@@ -168,3 +168,49 @@ test('a preview whose cached PNG is gone is rendered again', async ($, on) => {
   await clock.advance(1)
   expect((await ui.find({ key: 'pic' }))?.props).toMatchObject({ source: { file: '/c/p2.png' } })
 })
+
+const ONE_PIXEL = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+
+const pngTool = (id: string) =>
+  ({ tool: 'mcp__asset-viewer__show', tool_use_id: id, path: '/a/pic.png' }) as const
+
+test('over ssh the picture is sent as bytes', async ($, on) => {
+  mock.store(on)
+  mock.env(on, { SSH_CONNECTION: '10.0.0.2 51000 10.0.0.1 22' })
+  on('fs.exists', () => ({ value: true }))
+  on('fs.read', () => ({ value: { base64: ONE_PIXEL } }))
+  on('process.run', () => ok('/c/pic.png\t10\t10\t1\t1\t/a/pic.png\t-\t-\n'))
+
+  await $.tool.call(pngTool('s1'))
+  const ui = await $.ui.mount({
+    plugin: 'asset-viewer', surface: 'terminal', component: 'ToolResult', requestId: 's1', props: result('s1', ''),
+  })
+  expect((await ui.find({ key: 'pic' }))?.props).toMatchObject({ source: { png: ONE_PIXEL } })
+})
+
+test('the transport setting overrides the guess', { options: { transport: 'bytes' } }, async ($, on) => {
+  mock.store(on)
+  mock.env(on, {})
+  on('fs.exists', () => ({ value: true }))
+  on('fs.read', () => ({ value: { base64: ONE_PIXEL } }))
+  on('process.run', () => ok('/c/pic.png\t10\t10\t1\t1\t/a/pic.png\t-\t-\n'))
+
+  await $.tool.call(pngTool('s2'))
+  const ui = await $.ui.mount({
+    plugin: 'asset-viewer', surface: 'terminal', component: 'ToolResult', requestId: 's2', props: result('s2', ''),
+  })
+  expect((await ui.find({ key: 'pic' }))?.props).toMatchObject({ source: { png: ONE_PIXEL } })
+})
+
+test('a local terminal reads the file by path', async ($, on) => {
+  mock.store(on)
+  mock.env(on, { TERM_PROGRAM: 'ghostty' })
+  on('fs.exists', () => ({ value: true }))
+  on('process.run', () => ok('/c/pic.png\t10\t10\t1\t1\t/a/pic.png\t-\t-\n'))
+
+  await $.tool.call(pngTool('s3'))
+  const ui = await $.ui.mount({
+    plugin: 'asset-viewer', surface: 'terminal', component: 'ToolResult', requestId: 's3', props: result('s3', ''),
+  })
+  expect((await ui.find({ key: 'pic' }))?.props).toMatchObject({ source: { file: '/c/pic.png', format: 'png' } })
+})

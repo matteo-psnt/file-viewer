@@ -10,3 +10,6 @@ First version.
 - PDFs; Word, PowerPoint and Excel through LibreOffice or Quick Look plus headless Chrome; images through `sips`; SVG through `rsvg-convert`
 - Animated GIF and WebP playback
 - Previews saved to the plugin store so resumed conversations draw them again
+- Linux support for the converter (ImageMagick, LibreOffice, XDG cache)
+- Pictures sent as bytes over ssh, in Warp and under WSL, with an "Image transport" setting to override
+- `bin/doctor.sh` to check installed converters and whether the terminal draws placeholder images

@@ -142,9 +142,39 @@ office_to_pdf() {
   sed -e 's|\(Attachment[0-9]*\)\.pdf|\1-pdf.png|g' -e "s|</head>|<style>$css</style></head>|" "$ql/Preview.html" > "$ql/print.html"
   "$browser" --headless=new --disable-gpu --no-pdf-header-footer --user-data-dir="$work/profile" \
     --print-to-pdf="$pdf" "file://$ql/print.html" >/dev/null 2>&1 || true
+  [ -f "$pdf" ] && drop_trailing_blank_pages "$pdf" "$work"
   rm -rf "$work"
   [ -f "$pdf" ] && touch "$cache/$doc.approx"
   [ -f "$pdf" ]
+}
+
+# A page is blank when, rendered tiny in gray, almost no pixel is darker than
+# white. The PGM header's own few bytes stay under the threshold.
+is_blank_page() {
+  dark=$(pdftoppm -f "$2" -l "$2" -r 8 -gray "$1" | od -An -v -tu1 | tr -s ' ' '\n' |
+    awk '$1 != "" && $1 < 245 { n++ } END { print n + 0 }')
+  [ "$dark" -lt 24 ]
+}
+
+# Quick Look pads each document page to a minimum height, so printing it can
+# spill an empty page at the end. Keep pages up to the last one with ink.
+drop_trailing_blank_pages() {
+  file=$1
+  dir=$2
+  total=$(pdfinfo "$file" 2>/dev/null | awk '/^Pages:/ {print $2}')
+  last=${total:-1}
+  while [ "$last" -gt 1 ] && is_blank_page "$file" "$last"; do last=$((last - 1)); done
+  [ "$last" -lt "${total:-1}" ] || return 0
+  if [ "$last" -eq 1 ]; then
+    pdfseparate -f 1 -l 1 "$file" "$dir/kept.pdf"
+  else
+    pdfseparate -f 1 -l "$last" "$file" "$dir/page-%d.pdf"
+    n=1
+    set --
+    while [ "$n" -le "$last" ]; do set -- "$@" "$dir/page-$n.pdf"; n=$((n + 1)); done
+    pdfunite "$@" "$dir/kept.pdf"
+  fi
+  mv "$dir/kept.pdf" "$file"
 }
 
 render_pdf() {

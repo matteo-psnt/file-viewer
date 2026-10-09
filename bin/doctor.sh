@@ -130,7 +130,7 @@ if "i=31;OK" not in text:
     print(f"  {red} No kitty graphics: previews show as a text placeholder.")
     print("    Ghostty and kitty draw them.")
 else:
-    print("  Below should be a small red and blue bar. Do you see it? [y/n] ", end="")
+    print("  Do you see a small red and blue bar here? [y/n] ", end="")
     if not placeholder_test():
         print(f"  {red} This terminal answers kitty graphics queries but doesn't draw the")
         print("    placeholder images Claude Code uses (Warp, WezTerm, Konsole and VS Code are")

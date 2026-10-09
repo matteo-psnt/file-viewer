@@ -16,5 +16,18 @@
   ],
   "types": "./types/index.d.ts",
   "homepage": "https://github.com/matteo-psnt/asset-viewer",
-  "repository": "https://github.com/matteo-psnt/asset-viewer"
+  "repository": "https://github.com/matteo-psnt/asset-viewer",
+  "userConfig": {
+    "transport": {
+      "type": "string",
+      "title": "Image transport",
+      "description": "How pictures reach the terminal. auto sends bytes over ssh, in Warp and under WSL, and file paths everywhere else.",
+      "options": [
+        "auto",
+        "file",
+        "bytes"
+      ],
+      "default": "auto"
+    }
+  }
 }

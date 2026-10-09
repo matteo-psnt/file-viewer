@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, Timer } from 'claude-code'
+import type { EngineInterface, ImageSource, PluginOptions, Register, Timer } from 'claude-code'
 
 import type { Frame, GridCell, Preview, Size, Viewer } from '../types'
 
@@ -8,8 +8,6 @@ type ImagePreview = Extract<Preview, { kind: 'image' }>
 const TOOL = 'show'
 const FULL_TOOL = 'mcp__asset-viewer__show'
 const PANE = 'asset-viewer'
-// Survives reboots, unlike /tmp; macOS may still purge it, so a missing PNG is rendered again.
-const CACHE = '~/Library/Caches/asset-viewer'
 const STORE_INDEX = 'previews:index'
 const STORE_KEEP = 500
 const KEEP = 100
@@ -54,7 +52,7 @@ async function renderImage(
   page: number,
 ): Promise<ImagePreview> {
   const script = `${$.plugin.root}/bin/render.sh`
-  const ran = await $.process.run(['/bin/sh', script, source, String(page), CACHE], {
+  const ran = await $.process.run(['/bin/sh', script, source, String(page)], {
     timeoutMs: 120_000,
   })
   if (ran.exitCode !== 0) {
@@ -186,6 +184,52 @@ function progressBar(page: number, pages: number, width: number) {
   return '━'.repeat(filled) + '─'.repeat(Math.max(0, width - filled))
 }
 
+// How a picture reaches the terminal: by path, which the terminal reads itself,
+// or as bytes in the drawing. A terminal on another machine (ssh), Warp and
+// a Windows terminal in front of WSL cannot read this machine's files.
+type Transport = 'file' | 'bytes'
+let transport: Transport | undefined
+let transportSetting: unknown = 'auto'
+
+async function transportOf($: EngineInterface): Promise<Transport> {
+  if (transport !== undefined) {
+    return transport
+  }
+  if (transportSetting === 'file' || transportSetting === 'bytes') {
+    transport = transportSetting
+  } else {
+    try {
+      const remote = (await $.env.get('SSH_CONNECTION')) ?? (await $.env.get('SSH_TTY'))
+      const isWarp = (await $.env.get('TERM_PROGRAM')) === 'WarpTerminal'
+      const isWsl = (await $.env.get('WSL_DISTRO_NAME')) !== undefined
+      transport = remote !== undefined || isWarp || isWsl ? 'bytes' : 'file'
+    } catch {
+      transport = 'file'
+    }
+  }
+
+  return transport
+}
+
+const bytesOf = new Map<string, string>()
+
+async function imageSource($: EngineInterface, png: string): Promise<ImageSource> {
+  if ((await transportOf($)) === 'file') {
+    return { file: png, format: 'png' }
+  }
+  let base64 = bytesOf.get(png)
+  if (base64 === undefined) {
+    base64 = (await $.fs.read(png, { as: 'bytes' })).base64
+    bytesOf.set(png, base64)
+    const oldest = bytesOf.keys().next().value
+    if (bytesOf.size > 64 && oldest !== undefined) {
+      bytesOf.delete(oldest)
+    }
+  }
+
+  return { png: base64 }
+}
+
 // Render the page after the one just shown so the next press is instant.
 function prefetch($: EngineInterface, p: ImagePreview) {
   if (p.page < p.pages) {
@@ -219,14 +263,14 @@ function playAnimation(
     }
     run.frame = (run.frame + 1) % frames.length
     if (run.frame === 0 && ++run.loops >= maxLoops) {
-      await $.ui.blit({ requestId, key, source: { file: frames[0]!.png, format: 'png' } }).catch(() => undefined)
+      await $.ui.blit({ requestId, key, source: await imageSource($, frames[0]!.png) }).catch(() => undefined)
       animations.delete(id)
       run.loops = -1
 
       return
     }
     const shown = await $.ui
-      .blit({ requestId, key, source: { file: frames[run.frame]!.png, format: 'png' } })
+      .blit({ requestId, key, source: await imageSource($, frames[run.frame]!.png) })
       .catch((err: Error) => ({ deny: err.message }))
     // A few misses while the Image mounts are expected; more means it is gone.
     if (shown.deny !== undefined && ++run.misses > 3) {
@@ -287,14 +331,16 @@ async function showGrid($: EngineInterface, p: ImagePreview, start: number) {
 }
 
 function openExternally($: EngineInterface, source: string) {
-  void $.process.run(['open', source]).catch(() => undefined)
+  void $.process.run(['/bin/sh', `${$.plugin.root}/bin/open.sh`, source]).catch(() => undefined)
 }
 
 function unsupportedText(value: Extract<Preview, { kind: 'unsupported' }>) {
   return `Can't preview ${nameOf(value.source)}: ${value.reason}. Supported: ${SUPPORTED}.`
 }
 
-export const register: Register = on => {
+export const register: Register = (on, options: PluginOptions) => {
+  transport = undefined
+  transportSetting = options.transport ?? 'auto'
   // Animations started this load: a redraw must not restart one that finished.
   const started = new Set<string>()
 
@@ -426,7 +472,7 @@ export const register: Register = on => {
         <Text dimColor>{label}</Text>
         <Image
           key="pic"
-          source={{ file: value.png, format: 'png' }}
+          source={await imageSource($, value.png)}
           columns={box.columns}
           rows={box.rows}
           alt={`[${formatOf(value.source)}: ${nameOf(value.source)}${pageLabel(value)}. This terminal cannot draw images; try Ghostty or kitty]`}
@@ -482,6 +528,9 @@ export const register: Register = on => {
       const grid = state.grid
       const cellColumns = Math.floor((inner - 4) / 3)
       const rowsEach = Math.max(4, Math.floor((bodyRows - 4) / 2))
+      const sources = new Map(
+        await Promise.all(grid.cells.map(async cell => [cell.page, await imageSource($, cell.png)] as const)),
+      )
       const rowsOf = [grid.cells.slice(0, 3), grid.cells.slice(3, 6)]
       const pick = async (page: number) => {
         await go(page)
@@ -498,7 +547,7 @@ export const register: Register = on => {
 
                 return (
                   <Box key={`cell${cell.page}`} flexDirection="column" width={cellColumns} alignItems="center">
-                    <Image key={`thumb${cell.page}`} source={{ file: cell.png, format: 'png' }} columns={box.columns} rows={box.rows} alt={`page ${cell.page}`} />
+                    <Image key={`thumb${cell.page}`} source={sources.get(cell.page) ?? { file: cell.png, format: 'png' }} columns={box.columns} rows={box.rows} alt={`page ${cell.page}`} />
                     <Button
                       key={`go${cell.page}`}
                       label={`${cell.page}`}
@@ -532,7 +581,7 @@ export const register: Register = on => {
         <Box justifyContent="center">
           <Image
             key="page"
-            source={{ file: p.png, format: 'png' }}
+            source={await imageSource($, p.png)}
             columns={box.columns}
             rows={box.rows}
             alt={`[${nameOf(p.source)}${pageLabel(p)}]`}

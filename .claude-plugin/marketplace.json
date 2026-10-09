@@ -1,0 +1,5 @@
+{
+  "name": "asset-viewer",
+  "owner": { "name": "Matteo Pesenti" },
+  "plugins": [{ "name": "asset-viewer", "source": "./" }]
+}

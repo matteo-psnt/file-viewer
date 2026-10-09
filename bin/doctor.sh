@@ -128,17 +128,17 @@ def placeholder_test():
 
 if "i=31;OK" not in text:
     print(f"  {red} No kitty graphics: previews show as a text placeholder.")
-    print("    Ghostty, kitty and Warp draw them.")
+    print("    Ghostty and kitty draw them.")
 else:
     print("  Below should be a small red and blue bar. Do you see it? [y/n] ", end="")
     if not placeholder_test():
         print(f"  {red} This terminal answers kitty graphics queries but doesn't draw the")
-        print("    placeholder images Claude Code uses (WezTerm, Konsole and VS Code are known")
-        print("    cases). Previews show as a text placeholder.")
+        print("    placeholder images Claude Code uses (Warp, WezTerm, Konsole and VS Code are")
+        print("    known cases). Previews show as a text placeholder.")
     elif "i=32;OK" in text:
         print(f"  {green} Kitty graphics with placeholders and local files. Everything works.")
     else:
         print(f"  {yellow} Kitty graphics, but this terminal won't read local files.")
-    print("    asset-viewer sends bytes when it detects ssh, Warp or WSL; elsewhere set its")
-    print('    "Image transport" option to "bytes" in /config.')
+        print("    asset-viewer sends bytes when it detects ssh, Warp or WSL; elsewhere set its")
+        print('    "Image transport" option to "bytes" in /config.')
 EOF

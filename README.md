@@ -32,7 +32,7 @@ LibreOffice is what turns Word, PowerPoint and Excel files into pages. On Linux 
 
 ## Where it works
 
-I've tested it in Ghostty on macOS, and the converter on macOS 26 and Ubuntu 24.04. The rest of this table comes from each terminal's docs and source, so treat it as a guide and trust `doctor.sh` over it.
+I've tested it in Ghostty, Warp and Terminal.app on macOS, and the converter on macOS 26 and Ubuntu 24.04. The rest of this table comes from each terminal's docs and source, so treat it as a guide and trust `doctor.sh` over it.
 
 | Terminal | Pictures | Notes |
 | --- | --- | --- |
@@ -40,12 +40,12 @@ I've tested it in Ghostty on macOS, and the converter on macOS 26 and Ubuntu 24.
 | kitty | Yes | The protocol's home |
 | iTerm2 | Probably | Has the placeholder code; untested |
 | Rio | Probably | Placeholders on its main branch; untested |
-| Warp | Unclear | Draws kitty images but won't read local files, so the plugin sends bytes there. Placeholder support is undocumented |
+| Warp | No | Tested: draws kitty images but shows placeholders as raw characters |
 | WezTerm, Konsole, VS Code | No | They draw kitty images but not placeholders |
 | Terminal.app, Alacritty, Windows Terminal, foot | No | No kitty graphics (tested Terminal.app) |
 | tmux | No | Claude Code doesn't send pictures through tmux |
 
-Over ssh the terminal can't read files on the remote machine, so the plugin sends the picture's bytes instead. It does the same in Warp and under WSL. If it guesses wrong for your setup, set "Image transport" to `bytes` or `file` in `/config`.
+Over ssh the terminal can't read files on the remote machine, so the plugin sends the picture's bytes instead. It does the same under WSL. If it guesses wrong for your setup, set "Image transport" to `bytes` or `file` in `/config`.
 
 It runs on macOS and Linux. Native Windows isn't supported; WSL is, with a terminal from the "Yes" rows. The Claude desktop app and the VS Code extension don't show pictures, since the image element only exists in the terminal.
 

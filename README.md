@@ -14,15 +14,40 @@ It adds a `show` tool Claude can call whenever seeing a file would help (a plot 
 
 Answer `y` to add the marketplace, then pick the user scope. It loads in every session after that.
 
-You need a terminal that speaks the kitty graphics protocol to see real pixels: [Ghostty](https://ghostty.org) or [kitty](https://sw.kovidgoyal.net/kitty/). Anywhere else you get a text placeholder naming the file and page.
+You need a terminal that draws kitty graphics with Unicode placeholders, which is how Claude Code places pictures. [Ghostty](https://ghostty.org) and [kitty](https://sw.kovidgoyal.net/kitty/) do. Anywhere else you get a text placeholder naming the file and page. Run `sh bin/doctor.sh` from the plugin folder in the terminal you use Claude Code in, and it tells you what works and what to install.
 
-It runs on macOS for now, since it leans on `sips`, `qlmanage` and the Chrome app bundle. Install the rest with Homebrew:
+On macOS, install the converters with Homebrew:
 
 ```
 brew install poppler librsvg imagemagick
 ```
 
-LibreOffice is optional. With it (`brew install --cask libreoffice`) Word, PowerPoint and Excel files convert with exact page breaks and equations. Without it they go through Quick Look and headless Chrome, which gets every page but only an approximate layout.
+On Debian or Ubuntu:
+
+```
+sudo apt install poppler-utils librsvg2-bin imagemagick libheif1 unzip
+```
+
+LibreOffice is what turns Word, PowerPoint and Excel files into pages. On Linux it's required (`libreoffice-writer`, `libreoffice-impress`, `libreoffice-calc`, plus `libreoffice-math` or Word equations come out blank). On macOS it's optional (`brew install --cask libreoffice`): without it the plugin goes through Quick Look and headless Chrome, which gets every page but only an approximate layout and drops equations.
+
+## Where it works
+
+I've tested it in Ghostty on macOS, and the converter on macOS 26 and Ubuntu 24.04. The rest of this table comes from each terminal's docs and source, so treat it as a guide and trust `doctor.sh` over it.
+
+| Terminal | Pictures | Notes |
+| --- | --- | --- |
+| Ghostty | Yes | Tested |
+| kitty | Yes | The protocol's home |
+| iTerm2 | Probably | Has the placeholder code; untested |
+| Rio | Probably | Placeholders on its main branch; untested |
+| Warp | Unclear | Draws kitty images but won't read local files, so the plugin sends bytes there. Placeholder support is undocumented |
+| WezTerm, Konsole, VS Code | No | They draw kitty images but not placeholders |
+| Terminal.app, Alacritty, Windows Terminal, foot | No | No kitty graphics (tested Terminal.app) |
+| tmux | No | Claude Code doesn't send pictures through tmux |
+
+Over ssh the terminal can't read files on the remote machine, so the plugin sends the picture's bytes instead. It does the same in Warp and under WSL. If it guesses wrong for your setup, set "Image transport" to `bytes` or `file` in `/config`.
+
+It runs on macOS and Linux. Native Windows isn't supported; WSL is, with a terminal from the "Yes" rows. The Claude desktop app and the VS Code extension don't show pictures, since the image element only exists in the terminal.
 
 ## What it shows
 
@@ -30,7 +55,7 @@ LibreOffice is optional. With it (`brew install --cask libreoffice`) Word, Power
 | --- | --- |
 | PDF | One page at a time, any page, with paging |
 | Word, PowerPoint, Excel, RTF, OpenDocument | Every page or slide, converted to PDF once and cached |
-| PNG, JPEG, HEIC, AVIF, WebP, TIFF, BMP, PSD, camera RAW | Converted with `sips` |
+| PNG, JPEG, HEIC, AVIF, WebP, TIFF, BMP, PSD, camera RAW | `sips` on macOS, ImageMagick on Linux (HEIC there needs libheif) |
 | Animated GIF and WebP | Plays frame by frame with the file's own timing |
 | SVG | Rendered with `rsvg-convert` on white |
 | Keynote, Pages, Numbers | First page only, since that's all the file's preview holds |
@@ -57,7 +82,7 @@ There's also a "Go to page" field.
 
 ## How it works
 
-`bin/render.sh` turns a file into a PNG (or a folder of frames) under `~/Library/Caches/asset-viewer`, keyed by path, modification time and page, so the second look at anything is instant. The page after the one you're on is rendered ahead of time.
+`bin/render.sh` turns a file into a PNG (or a folder of frames) under `~/Library/Caches/asset-viewer` (or `~/.cache/asset-viewer` on Linux), keyed by path, modification time and page, so the second look at anything is instant. The page after the one you're on is rendered ahead of time.
 
 `hooks/register.tsx` is a Claude Code function-hooks module. It registers the tool, draws each preview by hooking the `ToolResult` row with an `Image` element, and animates GIFs by swapping that image's source with `$.ui.blit` on a timer. Previews are saved to the plugin store, so a resumed conversation draws them again. If the cache got cleared in between, the row re-renders the file.
 
@@ -74,7 +99,10 @@ A marketplace added from a folder is read from that folder, so edits show up aft
 ```
 claude plugin validate .
 claude plugin test .
+sh tests/converter.sh
 ```
+
+The first two check the hooks module against Claude Code itself. The last runs the converter over the files in `tests/fixtures`, and CI runs it on both macOS and Ubuntu.
 
 The plugin API this is built on is in early access and may change between Claude Code releases.
 

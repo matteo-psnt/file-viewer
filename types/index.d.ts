@@ -18,11 +18,11 @@ export type Preview =
     }
   | { kind: 'unsupported'; source: string; reason: string; caption?: string }
 
-export type GridCell = { page: number; png: string; width: number; height: number }
+export type Thumb = { page: number; png: string; width: number; height: number }
 
 export type Viewer = {
   preview: Extract<Preview, { kind: 'image' }>
-  grid?: { start: number; cells: GridCell[] }
+  thumbs?: Thumb[]
 }
 
 declare module 'claude-code' {

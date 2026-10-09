@@ -16,7 +16,7 @@ const result = (id: string, output: unknown) => ({
   isErrored: false,
 })
 
-test('a deck shows inline with its note and pages with the buttons', async ($, on) => {
+test('a deck shows inline without its note and pages with the buttons', async ($, on) => {
   mock.store(on)
   on('fs.exists', () => ({ value: true }))
   on('process.run', (_$, e) => page(Number(e.argv[3]), 'approximate layout (Quick Look)'))
@@ -39,7 +39,8 @@ test('a deck shows inline with its note and pages with the buttons', async ($, o
     props: result('call-1', ran.result),
   })
   expect((await ui.find({ key: 'pic' }))?.props).toMatchObject({ source: { file: '/c/p3.png' } })
-  expect(await ui.find({ type: 'Text', text: /approximate layout/ })).toBeDefined()
+  // The layout note is the viewer's to show; the card stays quiet.
+  expect(await ui.find({ type: 'Text', text: /approximate layout/ })).toBeUndefined()
 
   await ui.press({ key: 'next' })
   expect((await ui.find({ key: 'pic' }))?.props).toMatchObject({ source: { file: '/c/p4.png' } })
@@ -96,12 +97,13 @@ test('an animated gif plays by swapping frames', async ($, on) => {
   expect(blits.slice(0, 3)).toEqual(['/c/f1.png', '/c/f2.png', '/c/f0.png'])
 })
 
-test('the viewer pages, jumps, and shows a grid of six', async ($, on) => {
+test('the viewer shows a sidebar of pages and turns with the arrow keys', async ($, on) => {
   mock.store(on)
   on('fs.exists', () => ({ value: true }))
   on('process.run', (_$, e) => page(Number(e.argv[3])))
   on('ui.open', () => ({ value: { isPlaced: true } }))
-  await $.tool.call({ tool: 'mcp__asset-viewer__show', path: '/notes/deck.pptx', mode: 'viewer' })
+  on('ui.focus', () => ({}))
+  await $.tool.call({ tool: 'mcp__asset-viewer__show', path: '/notes/deck.pptx', page: 6, mode: 'viewer' })
 
   const ui = await $.ui.mount({
     plugin: 'asset-viewer',
@@ -111,17 +113,20 @@ test('the viewer pages, jumps, and shows a grid of six', async ($, on) => {
     viewport: { columns: 140, rows: 50 },
     props: { title: 'Viewer', isFocused: true, bodyColumns: 130, placement: 'inline' } as never,
   })
-  expect((await ui.find({ key: 'page' }))?.props).toMatchObject({ source: { file: '/c/p1.png' } })
-  await ui.press({ key: 'last' })
-  expect((await ui.find({ key: 'page' }))?.props).toMatchObject({ source: { file: '/c/p12.png' } })
-  await ui.input({ key: 'goto', text: '7' })
-  expect((await ui.find({ key: 'page' }))?.props).toMatchObject({ source: { file: '/c/p7.png' } })
+  expect((await ui.find({ key: 'page' }))?.props).toMatchObject({ source: { file: '/c/p6.png' } })
+  for (const n of [4, 5, 6, 7, 8]) {
+    expect(await ui.find({ key: `thumb:${n}` })).toBeDefined()
+  }
 
-  await ui.press({ key: 'grid' })
-  expect(await ui.find({ key: 'thumb7' })).toBeDefined()
-  expect(await ui.find({ key: 'thumb12' })).toBeDefined()
-  await ui.press({ key: 'go9' })
-  expect((await ui.find({ key: 'page' }))?.props).toMatchObject({ source: { file: '/c/p9.png' } })
+  // An arrow key moving the ring onto page 7's button turns to page 7.
+  await $.ui.focus({ component: 'Pane', requestId: 'asset-viewer', element: 'thumb:7', origin: { kind: 'person' } })
+  expect((await ui.find({ key: 'page' }))?.props).toMatchObject({ source: { file: '/c/p7.png' } })
+  expect(await ui.find({ key: 'thumb:9' })).toBeDefined()
+
+  await ui.press({ key: 'thumb:5' })
+  expect((await ui.find({ key: 'page' }))?.props).toMatchObject({ source: { file: '/c/p5.png' } })
+  await ui.press({ key: 'next' })
+  expect((await ui.find({ key: 'page' }))?.props).toMatchObject({ source: { file: '/c/p6.png' } })
 })
 
 test('a resumed conversation draws a preview from the store', async ($, on) => {

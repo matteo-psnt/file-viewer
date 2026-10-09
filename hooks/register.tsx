@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, ImageSource, PluginOptions, Register, Timer } from 'claude-code'
 
-import type { Frame, GridCell, Preview, Size, Viewer } from '../types'
+import type { Frame, Preview, Size, Thumb, Viewer } from '../types'
 
 type ImagePreview = Extract<Preview, { kind: 'image' }>
 
@@ -18,7 +18,7 @@ const SUPPORTED =
   'bmp, psd, camera raw); animated gif/webp; svg; Keynote, Pages and Numbers (first page)'
 const WIDTH: Record<Size, number> = { small: 36, medium: 64, large: 100 }
 const INLINE_LOOPS = 5
-const GRID = 6
+const SIDEBAR = 5
 const FORMAT: Record<string, string> = {
   pdf: 'PDF', docx: 'Word', doc: 'Word', rtf: 'Rich Text', odt: 'Document',
   pptx: 'PowerPoint', ppt: 'PowerPoint', odp: 'Presentation',
@@ -299,10 +299,41 @@ function ensureAnimation(
   playAnimation($, requestId, key, frames, maxLoops)
 }
 
+// The pages around `page` that the viewer's sidebar shows, centred on it.
+function sidebarPages(page: number, pages: number) {
+  const first = Math.min(Math.max(1, page - Math.floor(SIDEBAR / 2)), Math.max(1, pages - SIDEBAR + 1))
+
+  return Array.from({ length: Math.min(SIDEBAR, pages) }, (_, i) => first + i)
+}
+
+async function thumbsFor($: EngineInterface, p: ImagePreview): Promise<Thumb[] | undefined> {
+  if (p.pages < 2) {
+    return undefined
+  }
+
+  return Promise.all(
+    sidebarPages(p.page, p.pages).map(async page => {
+      const one = page === p.page ? p : await renderImage($, p.source, page)
+
+      return { page, png: one.png, width: one.width, height: one.height }
+    }),
+  )
+}
+
+async function showInViewer($: EngineInterface, p: ImagePreview) {
+  await update($, viewer, () => ({ preview: p, thumbs: undefined }))
+  const thumbs = await thumbsFor($, p)
+  await update($, viewer, state => (state?.preview.png === p.png ? { preview: p, thumbs } : state))
+  // Keep the focus ring on the current page so the next arrow moves one page.
+  if (p.pages > 1) {
+    void $.ui.focus({ requestId: PANE, key: `thumb:${p.page}` }).catch(() => undefined)
+  }
+  prefetch($, p)
+}
+
 async function openViewer($: EngineInterface, value: ImagePreview) {
-  await update($, viewer, () => ({ preview: value }))
   await $.ui.open({ id: PANE, title: `${formatOf(value.source)} · ${nameOf(value.source)}`, focus: true, closeOnEscape: true })
-  prefetch($, value)
+  await showInViewer($, value)
 }
 
 async function turnInline($: EngineInterface, id: string, p: ImagePreview, page: number) {
@@ -312,22 +343,10 @@ async function turnInline($: EngineInterface, id: string, p: ImagePreview, page:
 }
 
 async function turnViewer($: EngineInterface, p: ImagePreview, page: number) {
-  const next = await renderImage($, p.source, clampPage(p, page))
-  await update($, viewer, () => ({ preview: next }))
-  prefetch($, next)
-}
-
-async function showGrid($: EngineInterface, p: ImagePreview, start: number) {
-  const first = Math.min(Math.max(1, start), Math.max(1, p.pages - GRID + 1))
-  const pages = Array.from({ length: Math.min(GRID, p.pages) }, (_, i) => first + i)
-  const cells: GridCell[] = await Promise.all(
-    pages.map(async page => {
-      const one = await renderImage($, p.source, page)
-
-      return { page, png: one.png, width: one.width, height: one.height }
-    }),
-  )
-  await update($, viewer, () => ({ preview: p, grid: { start: first, cells } }))
+  if (clampPage(p, page) === p.page) {
+    return
+  }
+  await showInViewer($, await renderImage($, p.source, clampPage(p, page)))
 }
 
 function openExternally($: EngineInterface, source: string) {
@@ -353,7 +372,7 @@ export const register: Register = (on, options: PluginOptions) => {
         'helps: a plot or diagram you made, a slide or page you are explaining, a ' +
         'screenshot, a document. Supports ' + SUPPORTED + '. Multi-page files show one ' +
         'page with prev/next buttons; mode "viewer" opens a paging viewer with a thumbnail ' +
-        'grid. Animated GIFs play. Text files are not previewed (Claude Code already shows ' +
+        'sidebar. Animated GIFs play. Text files are not previewed (Claude Code already shows ' +
         'them). The user sees it; you do not. If a type is not supported the result says so.',
       inputSchema: {
         type: 'object',
@@ -455,55 +474,80 @@ export const register: Register = (on, options: PluginOptions) => {
 
     if (value.kind === 'unsupported') {
       return (
-        <Box flexDirection="column">
-          <Text color="warning">⚠ Can't preview {nameOf(value.source)}: {value.reason}</Text>
+        <Box flexDirection="column" borderStyle="round" borderColor="warning" paddingX={1}>
+          <Text>
+            <Text color="warning" bold>Can't preview</Text> {nameOf(value.source)}
+          </Text>
+          <Text dimColor>{value.reason}</Text>
           <Text dimColor>Supported: {SUPPORTED}</Text>
         </Box>
       )
     }
 
-    const columns = (e.viewport?.columns ?? 100) - 6
+    const columns = (e.viewport?.columns ?? 100) - 10
     const box = boxFor(value, columns, value.size === 'small' ? 16 : 36, WIDTH[value.size ?? 'medium'])
-    const label = `${value.caption ? `${value.caption} · ` : ''}${nameOf(value.source)}${pageLabel(value)}`
+    const cardWidth = Math.max(box.columns, 34) + 4
+    const isPaged = value.pages > 1
     ensureAnimation($, id, 'pic', value.frames, INLINE_LOOPS, started)
 
     return (
-      <Box flexDirection="column">
-        <Text dimColor>{label}</Text>
-        <Image
-          key="pic"
-          source={await imageSource($, value.png)}
-          columns={box.columns}
-          rows={box.rows}
-          alt={`[${formatOf(value.source)}: ${nameOf(value.source)}${pageLabel(value)}. This terminal cannot draw images; try Ghostty or kitty]`}
-        />
-        {value.note && <Text dimColor italic>ⓘ {value.note}</Text>}
-        <Box flexDirection="row" gap={1}>
-          {value.pages > 1 && (
-            <Button key="prev" label="◀" onPress={() => turnInline($, id, value, value.page - 1)} />
-          )}
-          {value.pages > 1 && (
-            <Button key="next" label="▶" onPress={() => turnInline($, id, value, value.page + 1)} />
-          )}
+      <Box flexDirection="column" borderStyle="round" borderColor="subtle" paddingX={1} width={cardWidth}>
+        <Box flexDirection="row" justifyContent="space-between" gap={1}>
+          <Text wrap="truncate-middle">
+            <Text color="claude" bold>{formatOf(value.source)}</Text> {nameOf(value.source)}
+          </Text>
+          {isPaged && <Text dimColor>{value.page} / {value.pages}</Text>}
+        </Box>
+        {value.caption && <Text dimColor italic wrap="truncate-end">{value.caption}</Text>}
+        <Box justifyContent="center">
+          <Image
+            key="pic"
+            source={await imageSource($, value.png)}
+            columns={box.columns}
+            rows={box.rows}
+            alt={`[${formatOf(value.source)}: ${nameOf(value.source)}${pageLabel(value)}. This terminal cannot draw images; try Ghostty or kitty]`}
+          />
+        </Box>
+        <Box flexDirection="row" gap={2}>
+          {isPaged && <Button key="prev" label="◀" plain dimColor onPress={() => turnInline($, id, value, value.page - 1)} />}
+          {isPaged && <Button key="next" label="▶" plain dimColor onPress={() => turnInline($, id, value, value.page + 1)} />}
           {value.frames && (
             <Button
               key="replay"
-              label="↻ Replay"
+              label="↻ replay"
+              plain
+              dimColor
               onPress={() => playAnimation($, id, 'pic', value.frames ?? [], INLINE_LOOPS)}
             />
           )}
-          <Button key="viewer" label="⤢ Viewer" onPress={() => openViewer($, value)} />
-          <Button key="open" label="↗ Open" dimColor onPress={() => openExternally($, value.source)} />
+          <Button key="viewer" label="⤢ viewer" plain dimColor onPress={() => openViewer($, value)} />
+          <Button key="open" label="↗ open" plain dimColor onPress={() => openExternally($, value.source)} />
         </Box>
       </Box>
     )
+  })
+
+  // Arrow keys walk the focus ring over the sidebar's page buttons; landing on
+  // one turns to that page.
+  on('ui.focus', async ($, e, next) => {
+    const moved = await next(e)
+    const page = e.element?.startsWith('thumb:') ? Number(e.element.slice(6)) : Number.NaN
+    if (e.requestId !== PANE || e.origin.kind !== 'person' || moved.deny !== undefined || !Number.isFinite(page)) {
+      return moved
+    }
+    const state = await read($, viewer)
+    if (state !== null && state.preview.page !== page) {
+      void turnViewer($, state.preview, page)
+    }
+
+    return moved
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
     if (e.surface !== 'terminal') {
       return next(e)
     }
-    const { Box, Text, Button, Image, Input } = $.ui.resolve(e)
+    const { Box, Text, Button, Image } = $.ui.resolve(e)
     const state: Viewer | null = await read($, viewer)
     if (state === null) {
       return <Text dimColor>Nothing open. Use /view &lt;path&gt;.</Text>
@@ -511,110 +555,59 @@ export const register: Register = (on, options: PluginOptions) => {
     const p = state.preview
     const isPaged = p.pages > 1
     const inner = Math.max(20, e.props.bodyColumns - 4)
-    const bodyRows = Math.max(10, (e.viewport?.rows ?? 30) - 12)
-    const go = (page: number) => turnViewer($, p, page)
-    const close = <Button key="close" label="Close" hotkey="q" onPress={() => $.ui.close({ id: PANE })} />
-    const open = <Button key="open" label="Open in app" hotkey="o" onPress={() => openExternally($, p.source)} />
-    const header = (
-      <Box flexDirection="row" justifyContent="space-between">
-        <Text bold color="claude">
-          {formatOf(p.source)} <Text color="text">{nameOf(p.source)}</Text>
-        </Text>
-        <Text dimColor>{isPaged ? `${p.page} / ${p.pages}` : `${p.width}×${p.height}`}</Text>
-      </Box>
+    const bodyRows = Math.max(12, (e.viewport?.rows ?? 30) - 10)
+    const sideWidth = isPaged ? Math.min(24, Math.max(12, Math.floor(inner / 6))) : 0
+    const mainColumns = inner - sideWidth - (isPaged ? 2 : 0)
+    const box = boxFor(p, mainColumns, bodyRows, 255)
+    const thumbRows = Math.max(2, Math.floor(bodyRows / SIDEBAR) - 1)
+    const thumbs = state.thumbs ?? []
+    const thumbSources = new Map(
+      await Promise.all(thumbs.map(async t => [t.page, await imageSource($, t.png)] as const)),
     )
-
-    if (state.grid) {
-      const grid = state.grid
-      const cellColumns = Math.floor((inner - 4) / 3)
-      const rowsEach = Math.max(4, Math.floor((bodyRows - 4) / 2))
-      const sources = new Map(
-        await Promise.all(grid.cells.map(async cell => [cell.page, await imageSource($, cell.png)] as const)),
-      )
-      const rowsOf = [grid.cells.slice(0, 3), grid.cells.slice(3, 6)]
-      const pick = async (page: number) => {
-        await go(page)
-      }
-
-      return (
-        <Box flexDirection="column" borderStyle="round" borderColor="claude" paddingX={1}>
-          {header}
-          {rowsOf.map((row, r) => (
-            <Box key={`row${r}`} flexDirection="row" gap={1}>
-              {row.map((cell, i) => {
-                const box = boxFor(cell, cellColumns, rowsEach, cellColumns)
-                const n = r * 3 + i + 1
-
-                return (
-                  <Box key={`cell${cell.page}`} flexDirection="column" width={cellColumns} alignItems="center">
-                    <Image key={`thumb${cell.page}`} source={sources.get(cell.page) ?? { file: cell.png, format: 'png' }} columns={box.columns} rows={box.rows} alt={`page ${cell.page}`} />
-                    <Button
-                      key={`go${cell.page}`}
-                      label={`${cell.page}`}
-                      hotkey={`${n}`}
-                      dimColor={cell.page !== p.page}
-                      onPress={() => pick(cell.page)}
-                    />
-                  </Box>
-                )
-              })}
-            </Box>
-          ))}
-          <Box flexDirection="row" gap={1}>
-            <Button key="gprev" label="◀ Prev 6" hotkey="p" onPress={() => showGrid($, p, grid.start - GRID)} />
-            <Button key="gnext" label="Next 6 ▶" hotkey="n" variant="primary" onPress={() => showGrid($, p, grid.start + GRID)} />
-            <Button key="single" label="Single page" hotkey="g" onPress={() => update($, viewer, () => ({ preview: p }))} />
-            {open}
-            {close}
-          </Box>
-          <Text dimColor>1-6 open a page · n/p next/prev six · g single page · Esc close</Text>
-        </Box>
-      )
-    }
-
-    const box = boxFor(p, inner, bodyRows, 255)
+    const go = (page: number) => turnViewer($, p, page)
     ensureAnimation($, PANE, 'page', p.frames, Number.POSITIVE_INFINITY, started)
 
     return (
       <Box flexDirection="column" borderStyle="round" borderColor="claude" paddingX={1}>
-        {header}
-        <Box justifyContent="center">
-          <Image
-            key="page"
-            source={await imageSource($, p.png)}
-            columns={box.columns}
-            rows={box.rows}
-            alt={`[${nameOf(p.source)}${pageLabel(p)}]`}
-          />
+        <Box flexDirection="row" justifyContent="space-between" gap={1}>
+          <Text wrap="truncate-middle">
+            <Text color="claude" bold>{formatOf(p.source)}</Text> {nameOf(p.source)}
+          </Text>
+          <Text dimColor>{isPaged ? `${p.page} / ${p.pages}` : `${p.width}×${p.height}`}</Text>
         </Box>
-        {isPaged && <Text color="claude">{progressBar(p.page, p.pages, inner)}</Text>}
+        <Box flexDirection="row" gap={2}>
+          {isPaged && (
+            <Box flexDirection="column" width={sideWidth}>
+              {thumbs.map(t => {
+                const isCurrent = t.page === p.page
+                const size = boxFor(t, sideWidth - 2, thumbRows, sideWidth - 2)
+                const source = thumbSources.get(t.page)
+
+                return (
+                  <Box key={`side:${t.page}`} flexDirection="row">
+                    <Text color="claude">{isCurrent ? '▌' : ' '}</Text>
+                    <Box flexDirection="column">
+                      {source && (
+                        <Image key={`img:${t.page}`} source={source} columns={size.columns} rows={size.rows} alt={`page ${t.page}`} />
+                      )}
+                      <Button key={`thumb:${t.page}`} label={`${t.page}`} plain dimColor={!isCurrent} onPress={() => go(t.page)} />
+                    </Box>
+                  </Box>
+                )
+              })}
+            </Box>
+          )}
+          <Box flexDirection="column" flexGrow={1} alignItems="center">
+            <Image key="page" source={await imageSource($, p.png)} columns={box.columns} rows={box.rows} alt={`[${nameOf(p.source)}${pageLabel(p)}]`} />
+          </Box>
+        </Box>
         {p.note && <Text dimColor italic>ⓘ {p.note}</Text>}
-        <Box flexDirection="row" gap={1}>
-          {isPaged && <Button key="first" label="⏮ First" hotkey="f" onPress={() => go(1)} />}
-          {isPaged && <Button key="prev" label="◀ Prev" hotkey="p" onPress={() => go(p.page - 1)} />}
-          {isPaged && <Button key="next" label="Next ▶" hotkey="n" variant="primary" onPress={() => go(p.page + 1)} />}
-          {isPaged && <Button key="last" label="Last ⏭" hotkey="l" onPress={() => go(p.pages)} />}
-          {isPaged && <Button key="grid" label="▦ Grid" hotkey="g" onPress={() => showGrid($, p, p.page)} />}
-          {open}
-          {close}
+        <Box flexDirection="row" gap={2}>
+          {isPaged && <Button key="prev" label="prev" hotkey="p" plain dimColor onPress={() => go(p.page - 1)} />}
+          {isPaged && <Button key="next" label="next" hotkey="n" plain dimColor onPress={() => go(p.page + 1)} />}
+          <Button key="open" label="open in app" hotkey="o" plain dimColor onPress={() => openExternally($, p.source)} />
+          <Text dimColor>{isPaged ? '↑/↓ pages · ' : ''}esc close</Text>
         </Box>
-        {isPaged && (
-          <Input
-            key="goto"
-            label="Go to page"
-            placeholder={`1-${p.pages}`}
-            submitLabel="Go"
-            onSubmit={(text: string) => {
-              const n = Number.parseInt(text, 10)
-              if (Number.isFinite(n)) {
-                void go(n)
-              }
-            }}
-          />
-        )}
-        <Text dimColor>
-          {isPaged ? 'n/p page · f/l first/last · g grid · ' : ''}o open in app · Esc close
-        </Text>
       </Box>
     )
   })

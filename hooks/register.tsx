@@ -204,6 +204,21 @@ const probe: Probe = { phase: 'idle' }
 const PROBE_BYTES =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
 
+// Claude Code's refusal, in words for the person reading the tool result.
+function explainDeny(deny: string | undefined) {
+  if (deny === undefined) {
+    return undefined
+  }
+  if (deny.includes('bg worker')) {
+    return "this session runs in Claude Code's background worker, which doesn't pass pictures to the terminal; a session started directly in the terminal can show them"
+  }
+  if (deny.includes('no placeholder images')) {
+    return "the terminal doesn't draw kitty placeholder images; Ghostty and kitty do"
+  }
+
+  return deny
+}
+
 async function runProbe($: EngineInterface, attempt = 0) {
   if (probe.bandId === undefined) {
     if (attempt < 10) {
@@ -224,7 +239,7 @@ async function runProbe($: EngineInterface, attempt = 0) {
       .blit({ ...site, source: { png: PROBE_BYTES } })
       .catch((err: Error) => ({ deny: err.message }))
     probe.verdict = byBytes.deny === undefined ? 'bytes' : 'none'
-    probe.reason = byBytes.deny ?? byFile.deny
+    probe.reason = explainDeny(byBytes.deny ?? byFile.deny)
   }
   probe.phase = 'done'
   transport = undefined
@@ -500,8 +515,8 @@ export const register: Register = (on, options: PluginOptions) => {
       return {
         result:
           `The user's terminal can't draw pictures (${probe.reason ?? 'no kitty graphics'}), so they saw only ` +
-          `a one-line placeholder for ${input.path}${where}, not the picture. Tell them, and describe what ` +
-          'matters in the file in words if that helps. Pictures need Ghostty or kitty, run outside tmux.',
+          `a one-line placeholder for ${input.path}${where}, not the picture. Tell them why, and describe ` +
+          'what matters in the file in words if that helps.',
       }
     }
 

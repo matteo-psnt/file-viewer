@@ -45,7 +45,7 @@ I've tested it in Ghostty, Warp and Terminal.app on macOS, and the converter on 
 | Terminal.app, Alacritty, Windows Terminal, foot | No | No kitty graphics (tested Terminal.app) |
 | tmux | No | Claude Code doesn't send pictures through tmux |
 
-A session Claude Code moves into its background daemon (the process list shows `claude daemon run` and `bg-pty-host`) can't show pictures either, whatever the terminal, because it draws into a virtual screen. Start `claude` fresh in the terminal to get them back. When pictures can't show for any reason, the plugin tells Claude so it can say so instead of describing a picture you never saw.
+Sessions in Claude Agents (opened with `<<`) run in Claude Code's background daemon, which draws into a virtual screen and passes no pictures to the terminal. Claude Code also refuses the kitty placeholder character in anything a plugin draws, so there's no way around that from a plugin. There, and in terminals without kitty graphics, the plugin draws a coloured block-character version of the picture instead, and tells Claude you're seeing a low-resolution preview so it doesn't describe detail you can't read.
 
 Over ssh the terminal can't read files on the remote machine, so the plugin sends the picture's bytes instead. It does the same under WSL. If it guesses wrong for your setup, set "Image transport" to `bytes` or `file` in `/config`.
 

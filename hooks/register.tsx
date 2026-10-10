@@ -229,9 +229,17 @@ async function runProbe($: EngineInterface, attempt = 0) {
     return
   }
   const site = { requestId: probe.bandId, key: 'probe' }
-  const byFile = await $.ui
-    .blit({ ...site, source: { file: `${$.plugin.root}/bin/probe.png`, format: 'png' } })
-    .catch((err: Error) => ({ deny: err.message }))
+  const blitFile = () =>
+    $.ui
+      .blit({ ...site, source: { file: `${$.plugin.root}/bin/probe.png`, format: 'png' } })
+      .catch((err: Error) => ({ deny: err.message }))
+  // The first file swap can come back as "not yet said ... blit again" while
+  // the terminal answers whether it reads local files; that's a wait, not a no.
+  let byFile = await blitFile()
+  for (let tries = 0; tries < 5 && byFile.deny?.includes('blit again'); tries++) {
+    await new Promise<void>(resolve => $.clock.after(300, resolve))
+    byFile = await blitFile()
+  }
   if (byFile.deny === undefined) {
     probe.verdict = 'file'
   } else {

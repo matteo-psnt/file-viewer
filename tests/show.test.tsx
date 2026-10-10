@@ -219,3 +219,29 @@ test('a local terminal reads the file by path', async ($, on) => {
   })
   expect((await ui.find({ key: 'pic' }))?.props).toMatchObject({ source: { file: '/c/pic.png', format: 'png' } })
 })
+
+const TWO_BY_TWO_BMP = 'Qk1GAAAAAAAAADYAAAAoAAAAAgAAAAIAAAABABgAAAAAABAAAAATCwAAEwsAAAAAAAAAAAAA/wAAAAAAAAAAAP////8AAA=='
+
+test('where pictures cannot draw, the preview is coloured half-block cells', { options: { transport: 'text' } }, async ($, on) => {
+  mock.store(on)
+  on('fs.exists', () => ({ value: true }))
+  on('fs.read', () => ({ value: { base64: TWO_BY_TWO_BMP } }))
+  on('process.run', (_$, e) =>
+    e.argv[1]?.endsWith('raster.sh')
+      ? ok('/c/pic-2x2.bmp\n')
+      : ok('/c/pic.png\t200\t200\t1\t1\t/a/pic.png\t-\t-\n'),
+  )
+
+  await $.tool.call(pngTool('r1'))
+  const ui = await $.ui.mount({
+    plugin: 'asset-viewer', surface: 'terminal', component: 'ToolResult', requestId: 'r1', props: result('r1', ''),
+    viewport: { columns: 12, rows: 40 },
+  })
+  const raster = await ui.find({ key: 'pic' })
+  expect(raster?.type).toBe('Raster')
+  const props = raster?.props as { columns: number; rows: number; cells: string }
+  const bytes = Uint8Array.from(atob(props.cells), c => c.charCodeAt(0))
+  const words = new Uint32Array(bytes.buffer)
+  // First cell: ▀ with red over blue, read from the 2x2 bitmap's left column.
+  expect([words[0], words[1], words[2]]).toEqual([0x2580, 0xff0000, 0x0000ff])
+})

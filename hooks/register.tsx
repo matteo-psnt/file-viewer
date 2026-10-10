@@ -298,6 +298,98 @@ async function imageSource($: EngineInterface, png: string): Promise<ImageSource
   return { png: base64 }
 }
 
+// Where the terminal can't draw pictures (Claude Agents' background worker,
+// Terminal.app, Warp, VS Code) the picture is drawn as text: one ▀ per cell,
+// its foreground the upper pixel and its background the lower one.
+const HALF_BLOCK = 0x2580
+const cellsOf = new Map<string, string>()
+
+function decodeBase64(text: string) {
+  const binary = atob(text)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i)
+  }
+
+  return bytes
+}
+
+function encodeBase64(bytes: Uint8Array) {
+  let binary = ''
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+  }
+
+  return btoa(binary)
+}
+
+async function rasterCells($: EngineInterface, png: string, columns: number, rows: number) {
+  const cacheKey = `${png}:${columns}x${rows}`
+  const cached = cellsOf.get(cacheKey)
+  if (cached !== undefined) {
+    return cached
+  }
+  const ran = await $.process.run(['/bin/sh', `${$.plugin.root}/bin/raster.sh`, png, String(columns), String(rows * 2)])
+  if (ran.exitCode !== 0) {
+    throw new Error(ran.stderr.trim() || 'raster.sh failed')
+  }
+  const bmp = decodeBase64((await $.fs.read(ran.stdout.trim(), { as: 'bytes' })).base64)
+  const view = new DataView(bmp.buffer)
+  const offset = view.getUint32(10, true)
+  const width = view.getInt32(18, true)
+  const height = view.getInt32(22, true)
+  const step = view.getUint16(28, true) / 8
+  const stride = Math.floor((step * 8 * width + 31) / 32) * 4
+  const pixel = (x: number, y: number) => {
+    const row = height < 0 ? y : Math.abs(height) - 1 - y
+    const at = offset + row * stride + x * step
+
+    return ((bmp[at + 2] ?? 0) << 16) | ((bmp[at + 1] ?? 0) << 8) | (bmp[at] ?? 0)
+  }
+  const words = new Uint32Array(columns * rows * 3)
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < columns; x++) {
+      const at = (y * columns + x) * 3
+      words[at] = HALF_BLOCK
+      words[at + 1] = pixel(x, y * 2)
+      words[at + 2] = pixel(x, y * 2 + 1)
+    }
+  }
+  const cells = encodeBase64(new Uint8Array(words.buffer))
+  cellsOf.set(cacheKey, cells)
+  const oldest = cellsOf.keys().next().value
+  if (cellsOf.size > 128 && oldest !== undefined) {
+    cellsOf.delete(oldest)
+  }
+
+  return cells
+}
+
+const isTextOnly = () => transportSetting === 'text' || probe.verdict === 'none'
+
+type Draw = { key: string; png: string; columns: number; rows: number; alt: string }
+
+// A picture where the terminal draws them, coloured cells where it doesn't.
+async function picture($: EngineInterface, e: Parameters<EngineInterface['ui']['resolve']>[0], draw: Draw) {
+  if (e.surface !== 'terminal') {
+    return null
+  }
+  const { Image, Raster, Text } = $.ui.resolve(e)
+  if (isTextOnly()) {
+    try {
+      const cells = await rasterCells($, draw.png, draw.columns, draw.rows)
+
+      return <Raster key={draw.key} columns={draw.columns} rows={draw.rows} cells={cells} />
+    } catch {
+      return <Text dimColor>{draw.alt}</Text>
+    }
+  }
+
+  return (
+    <Image key={draw.key} source={await imageSource($, draw.png)} columns={draw.columns} rows={draw.rows} alt={draw.alt} />
+  )
+}
+
 // Render the page after the one just shown so the next press is instant.
 function prefetch($: EngineInterface, p: ImagePreview) {
   if (p.page < p.pages) {
@@ -320,9 +412,14 @@ function playAnimation(
   key: string,
   frames: Frame[],
   maxLoops: number,
+  size: { columns: number; rows: number },
 ) {
   const id = `${requestId}/${key}`
   stopAnimation(id)
+  const show = async (frame: Frame) =>
+    isTextOnly()
+      ? $.ui.blit({ requestId, key, cells: await rasterCells($, frame.png, size.columns, size.rows) })
+      : $.ui.blit({ requestId, key, source: await imageSource($, frame.png) })
   const run: Animation = { frame: 0, loops: 0, misses: 0 }
   animations.set(id, run)
   const step = async () => {
@@ -331,15 +428,13 @@ function playAnimation(
     }
     run.frame = (run.frame + 1) % frames.length
     if (run.frame === 0 && ++run.loops >= maxLoops) {
-      await $.ui.blit({ requestId, key, source: await imageSource($, frames[0]!.png) }).catch(() => undefined)
+      await show(frames[0]!).catch(() => undefined)
       animations.delete(id)
       run.loops = -1
 
       return
     }
-    const shown = await $.ui
-      .blit({ requestId, key, source: await imageSource($, frames[run.frame]!.png) })
-      .catch((err: Error) => ({ deny: err.message }))
+    const shown = await show(frames[run.frame]!).catch((err: Error) => ({ deny: err.message }))
     // A few misses while the Image mounts are expected; more means it is gone.
     if (shown.deny !== undefined && ++run.misses > 3) {
       animations.delete(id)
@@ -358,13 +453,14 @@ function ensureAnimation(
   frames: Frame[] | undefined,
   maxLoops: number,
   started: Set<string>,
+  size: { columns: number; rows: number },
 ) {
   const id = `${requestId}/${key}`
   if (frames === undefined || frames.length < 2 || animations.has(id) || started.has(id)) {
     return
   }
   started.add(id)
-  playAnimation($, requestId, key, frames, maxLoops)
+  playAnimation($, requestId, key, frames, maxLoops, size)
 }
 
 // The pages around `page` that the viewer's sidebar shows, centred on it.
@@ -520,14 +616,14 @@ export const register: Register = (on, options: PluginOptions) => {
     const note = shown.note ? ` Note: ${shown.note}.` : ''
 
     if (probe.verdict === 'none') {
+      const reason = probe.reason ?? 'no kitty graphics'
       return {
         result:
-          `The user's terminal can't draw pictures (${probe.reason ?? 'no kitty graphics'}), so they saw only ` +
-          `a one-line placeholder for ${input.path}${where}, not the picture. Tell them why, and describe ` +
-          'what matters in the file in words if that helps.',
+          `Shown to the user${how} as a low-resolution colour-block preview of ${input.path}${where}: ` +
+          `real pictures can't draw here (${reason}), so fine detail and small text won't be legible to ` +
+          'them. Describe what matters if it depends on detail.',
       }
     }
-
     return { result: `Shown to the user${how}: ${input.path}${where}.${note}` }
   })
 
@@ -618,7 +714,7 @@ export const register: Register = (on, options: PluginOptions) => {
     const box = boxFor(value, columns, value.size === 'small' ? 16 : 36, WIDTH[value.size ?? 'medium'])
     const cardWidth = Math.max(box.columns, 34) + 4
     const isPaged = value.pages > 1
-    ensureAnimation($, id, 'pic', value.frames, INLINE_LOOPS, started)
+    ensureAnimation($, id, 'pic', value.frames, INLINE_LOOPS, started, box)
 
     return (
       <Box flexDirection="column" borderStyle="round" borderColor="subtle" paddingX={1} width={cardWidth}>
@@ -630,13 +726,12 @@ export const register: Register = (on, options: PluginOptions) => {
         </Box>
         {value.caption && <Text dimColor italic wrap="truncate-end">{value.caption}</Text>}
         <Box justifyContent="center">
-          <Image
-            key="pic"
-            source={await imageSource($, value.png)}
-            columns={box.columns}
-            rows={box.rows}
-            alt={`[${formatOf(value.source)}: ${nameOf(value.source)}${pageLabel(value)}. This terminal cannot draw images; try Ghostty or kitty]`}
-          />
+          {await picture($, e, {
+            key: 'pic',
+            png: value.png,
+            ...box,
+            alt: `[${formatOf(value.source)}: ${nameOf(value.source)}${pageLabel(value)}. This terminal cannot draw images; try Ghostty or kitty]`,
+          })}
         </Box>
         <Box flexDirection="row" gap={2}>
           {isPaged && <Button key="prev" label="◀" plain dimColor onPress={() => turnInline($, id, value, value.page - 1)} />}
@@ -647,7 +742,7 @@ export const register: Register = (on, options: PluginOptions) => {
               label="↻ replay"
               plain
               dimColor
-              onPress={() => playAnimation($, id, 'pic', value.frames ?? [], INLINE_LOOPS)}
+              onPress={() => playAnimation($, id, 'pic', value.frames ?? [], INLINE_LOOPS, box)}
             />
           )}
           <Button key="viewer" label="⤢ viewer" plain dimColor onPress={() => openViewer($, value)} />
@@ -677,7 +772,7 @@ export const register: Register = (on, options: PluginOptions) => {
     if (e.surface !== 'terminal') {
       return next(e)
     }
-    const { Box, Text, Button, Image } = $.ui.resolve(e)
+    const { Box, Text, Button } = $.ui.resolve(e)
     const state: Viewer | null = await read($, viewer)
     if (state === null) {
       return <Text dimColor>Nothing open. Use /view &lt;path&gt;.</Text>
@@ -691,11 +786,17 @@ export const register: Register = (on, options: PluginOptions) => {
     const box = boxFor(p, mainColumns, bodyRows, 255)
     const thumbRows = Math.max(2, Math.floor(bodyRows / SIDEBAR) - 1)
     const thumbs = state.thumbs ?? []
-    const thumbSources = new Map(
-      await Promise.all(thumbs.map(async t => [t.page, await imageSource($, t.png)] as const)),
+    const thumbPictures = new Map(
+      await Promise.all(
+        thumbs.map(async t => {
+          const size = boxFor(t, sideWidth - 2, thumbRows, sideWidth - 2)
+
+          return [t.page, await picture($, e, { key: `img:${t.page}`, png: t.png, ...size, alt: `page ${t.page}` })] as const
+        }),
+      ),
     )
     const go = (page: number) => turnViewer($, p, page)
-    ensureAnimation($, PANE, 'page', p.frames, Number.POSITIVE_INFINITY, started)
+    ensureAnimation($, PANE, 'page', p.frames, Number.POSITIVE_INFINITY, started, box)
 
     return (
       <Box flexDirection="column" borderStyle="round" borderColor="claude" paddingX={1}>
@@ -710,16 +811,12 @@ export const register: Register = (on, options: PluginOptions) => {
             <Box flexDirection="column" width={sideWidth}>
               {thumbs.map(t => {
                 const isCurrent = t.page === p.page
-                const size = boxFor(t, sideWidth - 2, thumbRows, sideWidth - 2)
-                const source = thumbSources.get(t.page)
 
                 return (
                   <Box key={`side:${t.page}`} flexDirection="row">
                     <Text color="claude">{isCurrent ? '▌' : ' '}</Text>
                     <Box flexDirection="column">
-                      {source && (
-                        <Image key={`img:${t.page}`} source={source} columns={size.columns} rows={size.rows} alt={`page ${t.page}`} />
-                      )}
+                      {thumbPictures.get(t.page)}
                       <Button key={`thumb:${t.page}`} label={`${t.page}`} plain dimColor={!isCurrent} onPress={() => go(t.page)} />
                     </Box>
                   </Box>
@@ -728,7 +825,7 @@ export const register: Register = (on, options: PluginOptions) => {
             </Box>
           )}
           <Box flexDirection="column" flexGrow={1} alignItems="center">
-            <Image key="page" source={await imageSource($, p.png)} columns={box.columns} rows={box.rows} alt={`[${nameOf(p.source)}${pageLabel(p)}]`} />
+            {await picture($, e, { key: 'page', png: p.png, ...box, alt: `[${nameOf(p.source)}${pageLabel(p)}]` })}
           </Box>
         </Box>
         {p.note && <Text dimColor italic>ⓘ {p.note}</Text>}

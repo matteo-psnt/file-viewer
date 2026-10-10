@@ -21,11 +21,12 @@
     "transport": {
       "type": "string",
       "title": "Image transport",
-      "description": "How pictures reach the terminal. auto sends bytes over ssh, in Warp and under WSL, and file paths everywhere else.",
+      "description": "How pictures reach the terminal. auto picks file or bytes by asking the terminal, and falls back to coloured text blocks where pictures can't draw. text always draws blocks.",
       "options": [
         "auto",
         "file",
-        "bytes"
+        "bytes",
+        "text"
       ],
       "default": "auto"
     }

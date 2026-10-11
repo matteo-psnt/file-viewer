@@ -246,7 +246,7 @@ test('in Claude Agents the card says why pictures cannot show and offers the app
     plugin: 'asset-viewer', surface: 'terminal', component: 'ToolResult', requestId: 'b1', props: result('b1', ran.result),
   })
   expect(await ui.find({ key: 'pic' })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: /Start claude directly in a Ghostty or kitty window/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /CLAUDE_CODE_FORCE_TERMINAL_IMAGES/ })).toBeDefined()
   expect(await ui.find({ key: 'open' })).toBeDefined()
 })
 

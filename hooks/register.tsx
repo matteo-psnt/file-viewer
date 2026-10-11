@@ -217,14 +217,16 @@ const TERMINAL_NAMES: Record<string, string> = {
   'iTerm.app': 'iTerm2',
 }
 // Terminals that draw Claude Code's pictures once it is told to (tested).
+const FORCE_FIX =
+  'To turn them on, add "CLAUDE_CODE_FORCE_TERMINAL_IMAGES": "1" to env in ~/.claude/settings.json.'
 const FORCEABLE = /^(iTerm2|Rio)\b/
 
 function explainDeny(deny: string, termProgram: string | undefined): Blocked {
   const elsewhere = 'Open Claude Code in Ghostty or kitty to see pictures.'
   if (deny.includes('bg worker')) {
     return {
-      why: "This session runs in Claude Agents, which can't pass pictures to the terminal.",
-      fix: 'Start claude directly in a Ghostty or kitty window to see them.',
+      why: 'This session runs in Claude Agents, where Claude Code turns pictures off by default.',
+      fix: FORCE_FIX,
     }
   }
   if (deny.includes('tmux or screen')) {
@@ -242,7 +244,7 @@ function explainDeny(deny: string, termProgram: string | undefined): Blocked {
     return FORCEABLE.test(terminal)
       ? {
           why: `Claude Code only turns pictures on in Ghostty and kitty, and this is ${terminal}.`,
-          fix: `${terminal.split(' ')[0]} can show them: add "CLAUDE_CODE_FORCE_TERMINAL_IMAGES": "1" to env in ~/.claude/settings.json and restart Claude Code.`,
+          fix: `${terminal.split(' ')[0]} can show them. ${FORCE_FIX}`,
         }
       : { why: `Claude Code only shows pictures in Ghostty and kitty, and this is ${terminal}.`, fix: elsewhere }
   }

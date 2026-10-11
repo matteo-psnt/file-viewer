@@ -42,7 +42,7 @@ Claude Code decides which terminals get pictures: it asks the terminal for its n
 }
 ```
 
-The setting makes Claude Code draw pictures in any terminal and assume the terminal can read this computer's files. It applies to every terminal you run Claude Code in, so add it only if all of them are Ghostty, kitty, iTerm2 or Rio. In a terminal that can't draw pictures you'll see stray characters instead, and over ssh pictures won't load. To turn it on for one terminal only, set it in that terminal's profile or shell instead (`export CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1`). I've tested the rows marked tested on macOS; the rest come from each terminal's docs, so trust `doctor.sh` over them.
+The setting makes Claude Code draw pictures in any terminal and assume the terminal can read this computer's files. It applies to every terminal you run Claude Code in, and to Claude Agents sessions, so add it only if you use Ghostty, kitty, iTerm2 or Rio. In a terminal that can't draw pictures you'll see stray characters instead, and over ssh pictures won't load. To turn it on for one terminal only, set it in that terminal's profile or shell instead (`export CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1`). I've tested the rows marked tested on macOS; the rest come from each terminal's docs, so trust `doctor.sh` over them.
 
 | Terminal | Pictures | Notes |
 | --- | --- | --- |
@@ -55,7 +55,7 @@ The setting makes Claude Code draw pictures in any terminal and assume the termi
 | Terminal.app, Alacritty, Windows Terminal, foot | No | No kitty graphics (tested Terminal.app) |
 | tmux, screen | No | Claude Code doesn't send pictures through them |
 
-Sessions in Claude Agents (opened with `<<`) run in Claude Code's background daemon. It keeps the session's screen as text cells and passes no pictures to your terminal, whatever terminal that is, and a plugin can't get around it. There the preview is the same notice, naming Claude Agents as the reason.
+Sessions in Claude Agents (opened with `<<`) run in Claude Code's background daemon, where Claude Code turns pictures off by default. The same setting turns them back on: I tested it in a Claude Agents session in Ghostty and pictures draw as they do in a normal session. Without it, the preview is a notice naming Claude Agents as the reason.
 
 Wherever pictures can't show, Claude is told so in the tool result, with the reason, and describes what matters in words instead.
 

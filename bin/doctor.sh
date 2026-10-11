@@ -126,15 +126,21 @@ def placeholder_test():
     sys.stdout.write(f"\x1b_Ga=d,d=I,i={image_id},q=2\x1b\\")
     return answer.startswith("y")
 
+# Claude Code turns pictures on only for terminals that name themselves
+# Ghostty or kitty, whatever else can draw them.
+allowed = os.environ.get("TERM_PROGRAM", "").lower() == "ghostty" or "kitty" in os.environ.get("TERM", "")
 if "i=31;OK" not in text:
-    print(f"  {red} No kitty graphics: previews show as a text placeholder.")
+    print(f"  {red} No kitty graphics: previews show a notice instead of the picture.")
     print("    Ghostty and kitty draw them.")
 else:
     print("  Do you see a small red and blue bar here? [y/n] ", end="")
     if not placeholder_test():
         print(f"  {red} This terminal answers kitty graphics queries but doesn't draw the")
         print("    placeholder images Claude Code uses (Warp, WezTerm, Konsole and VS Code are")
-        print("    known cases). Previews show as a text placeholder.")
+        print("    known cases). Previews show a notice instead of the picture.")
+    elif not allowed and not os.environ.get("CLAUDE_CODE_FORCE_TERMINAL_IMAGES"):
+        print(f"  {yellow} This terminal draws pictures, but Claude Code only turns them on for")
+        print("    Ghostty and kitty. Start Claude Code with CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1.")
     elif "i=32;OK" in text:
         print(f"  {green} Kitty graphics with placeholders and local files. Everything works.")
     else:

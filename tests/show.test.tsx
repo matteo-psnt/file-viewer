@@ -1,4 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
+import type { TestBody } from 'claude-code/testing'
 
 const ok = (stdout: string) => ({
   value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false },
@@ -220,28 +221,49 @@ test('a local terminal reads the file by path', async ($, on) => {
   expect((await ui.find({ key: 'pic' }))?.props).toMatchObject({ source: { file: '/c/pic.png', format: 'png' } })
 })
 
-const TWO_BY_TWO_BMP = 'Qk1GAAAAAAAAADYAAAAoAAAAAgAAAAIAAAABABgAAAAAABAAAAATCwAAEwsAAAAAAAAAAAAA/wAAAAAAAAAAAP////8AAA=='
+// Runs the session-start probe with Claude Code refusing the picture swap.
+async function startRefused(...[$, on, deny]: [...Parameters<TestBody>, string]) {
+  const clock = mock.clock(on)
+  on('ui.blit', () => ({ value: { deny } }))
+  on('fs.write', () => ({ value: undefined }))
+  on('session.start', () => ({ cwd: '/a' }))
+  on('tool.register', () => ({ value: { tool: 'mcp__asset-viewer__show' } }))
+  on('command.register', () => ({ value: { command: 'view' } }))
+  await $.session.start({ cwd: '/a', surface: 'terminal', isInteractive: true } as never)
+  await $.ui.mount({ plugin: 'asset-viewer', surface: 'terminal', component: 'AbovePrompt', requestId: 'band', props: {} as never })
+  await clock.advance(500)
+}
 
-test('where pictures cannot draw, the preview is coloured half-block cells', { options: { transport: 'text' } }, async ($, on) => {
+test('in Claude Agents the card says why pictures cannot show and offers the app', async ($, on) => {
   mock.store(on)
   on('fs.exists', () => ({ value: true }))
-  on('fs.read', () => ({ value: { base64: TWO_BY_TWO_BMP } }))
-  on('process.run', (_$, e) =>
-    e.argv[1]?.endsWith('raster.sh')
-      ? ok('/c/pic-2x2.bmp\n')
-      : ok('/c/pic.png\t200\t200\t1\t1\t/a/pic.png\t-\t-\n'),
+  on('process.run', () => ok('/c/pic.png\t200\t200\t1\t1\t/a/pic.png\t-\t-\n'))
+  await startRefused($, on, 'the Image draws its alt here: the terminal draws no placeholder images (bg worker)')
+
+  const ran = await $.tool.call(pngTool('b1'))
+  expect(ran.result).toMatch(/^Not shown: This session runs in Claude Agents/)
+  const ui = await $.ui.mount({
+    plugin: 'asset-viewer', surface: 'terminal', component: 'ToolResult', requestId: 'b1', props: result('b1', ran.result),
+  })
+  expect(await ui.find({ key: 'pic' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /Start claude directly in a Ghostty or kitty window/ })).toBeDefined()
+  expect(await ui.find({ key: 'open' })).toBeDefined()
+})
+
+test('iTerm2 is told how to turn pictures on', async ($, on) => {
+  mock.store(on)
+  on('fs.exists', () => ({ value: true }))
+  on('process.run', () => ok('/c/pic.png\t200\t200\t1\t1\t/a/pic.png\t-\t-\n'))
+  await startRefused(
+    $,
+    on,
+    'the Image draws its alt here: the terminal draws no placeholder images (probe: graphics reply OK, terminal iTerm2 3.7.4)',
   )
 
-  await $.tool.call(pngTool('r1'))
+  const ran = await $.tool.call(pngTool('b2'))
+  expect(ran.result).toContain('only turns pictures on in Ghostty and kitty, and this is iTerm2 3.7.4.')
   const ui = await $.ui.mount({
-    plugin: 'asset-viewer', surface: 'terminal', component: 'ToolResult', requestId: 'r1', props: result('r1', ''),
-    viewport: { columns: 12, rows: 40 },
+    plugin: 'asset-viewer', surface: 'terminal', component: 'ToolResult', requestId: 'b2', props: result('b2', ran.result),
   })
-  const raster = await ui.find({ key: 'pic' })
-  expect(raster?.type).toBe('Raster')
-  const props = raster?.props as { columns: number; rows: number; cells: string }
-  const bytes = Uint8Array.from(atob(props.cells), c => c.charCodeAt(0))
-  const words = new Uint32Array(bytes.buffer)
-  // First cell: ▀ with red over blue, read from the 2x2 bitmap's left column.
-  expect([words[0], words[1], words[2]]).toEqual([0x2580, 0xff0000, 0x0000ff])
+  expect(await ui.find({ type: 'Text', text: /CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1/ })).toBeDefined()
 })

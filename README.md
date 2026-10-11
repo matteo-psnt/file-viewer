@@ -14,7 +14,7 @@ It adds a `show` tool Claude can call whenever seeing a file would help (a plot 
 
 Answer `y` to add the marketplace, then pick the user scope. It loads in every session after that.
 
-You need a terminal that draws kitty graphics with Unicode placeholders, which is how Claude Code places pictures. [Ghostty](https://ghostty.org) and [kitty](https://sw.kovidgoyal.net/kitty/) do. Anywhere else you get a text placeholder naming the file and page. Run `sh bin/doctor.sh` from the plugin folder in the terminal you use Claude Code in, and it tells you what works and what to install.
+You need a terminal Claude Code will draw pictures in. Out of the box that's [Ghostty](https://ghostty.org) and [kitty](https://sw.kovidgoyal.net/kitty/) 0.28 or newer; iTerm2 and Rio work too once you start Claude Code with `CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1`. Anywhere else the preview is a short notice saying why pictures can't show there and what would fix it, with a button that opens the file in its own app. Run `sh bin/doctor.sh` from the plugin folder in the terminal you use Claude Code in, and it tells you what works and what to install.
 
 On macOS, install the converters with Homebrew:
 
@@ -32,20 +32,22 @@ LibreOffice is what turns Word, PowerPoint and Excel files into pages. On Linux 
 
 ## Where it works
 
-I've tested it in Ghostty, Warp and Terminal.app on macOS, and the converter on macOS 26 and Ubuntu 24.04. The rest of this table comes from each terminal's docs and source, so treat it as a guide and trust `doctor.sh` over it.
+Claude Code decides which terminals get pictures: it asks the terminal for its name and turns pictures on only for Ghostty and kitty 0.28+. Other terminals are turned away by name, even ones that could draw them, unless `CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1` is set. I've tested the rows marked tested on macOS; the rest come from each terminal's docs, so trust `doctor.sh` over them.
 
 | Terminal | Pictures | Notes |
 | --- | --- | --- |
 | Ghostty | Yes | Tested |
-| kitty | Yes | The protocol's home |
-| iTerm2 | Probably | Has the placeholder code; untested |
-| Rio | Probably | Placeholders on its main branch; untested |
-| Warp | No | Tested: draws kitty images but shows placeholders as raw characters |
-| WezTerm, Konsole, VS Code | No | They draw kitty images but not placeholders |
+| kitty 0.28+ | Yes | The protocol's home |
+| iTerm2 | With the env var | Tested (3.7.4): turned away by name, draws correctly when forced |
+| Rio | With the env var | Tested (0.5.28): turned away by name, draws correctly when forced |
+| Warp | No | Tested: forced, it shows the placeholders as raw characters |
+| WezTerm, Konsole, VS Code | No | They draw kitty images but not the placeholders Claude Code uses |
 | Terminal.app, Alacritty, Windows Terminal, foot | No | No kitty graphics (tested Terminal.app) |
-| tmux | No | Claude Code doesn't send pictures through tmux |
+| tmux, screen | No | Claude Code doesn't send pictures through them |
 
-Sessions in Claude Agents (opened with `<<`) run in Claude Code's background daemon, which draws into a virtual screen and passes no pictures to the terminal. Claude Code also refuses the kitty placeholder character in anything a plugin draws, so there's no way around that from a plugin. There, and in terminals without kitty graphics, the plugin draws a coloured block-character version of the picture instead, and tells Claude you're seeing a low-resolution preview so it doesn't describe detail you can't read.
+Sessions in Claude Agents (opened with `<<`) run in Claude Code's background daemon. It keeps the session's screen as text cells and passes no pictures to your terminal, whatever terminal that is, and a plugin can't get around it. There the preview is the same notice, naming Claude Agents as the reason.
+
+Wherever pictures can't show, Claude is told so in the tool result, with the reason, and describes what matters in words instead.
 
 Over ssh the terminal can't read files on the remote machine, so the plugin sends the picture's bytes instead. It does the same under WSL. If it guesses wrong for your setup, set "Image transport" to `bytes` or `file` in `/config`.
 

@@ -21,12 +21,11 @@
     "transport": {
       "type": "string",
       "title": "Image transport",
-      "description": "How pictures reach the terminal. auto picks file or bytes by asking the terminal, and falls back to coloured text blocks where pictures can't draw. text always draws blocks.",
+      "description": "How pictures reach the terminal. auto picks file or bytes by asking the terminal.",
       "options": [
         "auto",
         "file",
-        "bytes",
-        "text"
+        "bytes"
       ],
       "default": "auto"
     }

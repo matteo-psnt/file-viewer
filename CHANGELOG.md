@@ -13,4 +13,5 @@ First version.
 - Previews saved to the plugin store so resumed conversations draw them again
 - Linux support for the converter (ImageMagick, LibreOffice, XDG cache)
 - Pictures sent as bytes over ssh, in Warp and under WSL, with an "Image transport" setting to override
+- A notice where pictures can't show (Claude Agents, tmux, terminals Claude Code doesn't draw pictures in) saying why and what would fix it, with a button to open the file in its own app
 - `bin/doctor.sh` to check installed converters and whether the terminal draws placeholder images

@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, ImageSource, PluginOptions, Register, Timer } from 'claude-code'
+import type { Elements, EngineInterface, ImageSource, PluginOptions, Register, Timer } from 'claude-code'
 
 import type { Frame, Preview, Size, Thumb, Viewer } from '../types'
 
@@ -198,25 +198,59 @@ type Probe = {
   phase: 'idle' | 'drawing' | 'done'
   bandId?: string
   verdict?: Transport | 'none'
-  reason?: string
+  blocked?: Blocked
 }
 const probe: Probe = { phase: 'idle' }
 const PROBE_BYTES =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
 
-// Claude Code's refusal, in words for the person reading the tool result.
-function explainDeny(deny: string | undefined) {
-  if (deny === undefined) {
-    return undefined
-  }
+// Why pictures can't show, and what would make them show, in words for the
+// person and for Claude. Claude Code turns pictures on only for Ghostty and
+// kitty 0.28+, and says which check failed in its refusal, e.g. "no
+// placeholder images (probe: graphics reply OK, terminal iTerm2 3.7.4)".
+type Blocked = { why: string; fix: string }
+
+const TERMINAL_NAMES: Record<string, string> = {
+  Apple_Terminal: 'Terminal.app',
+  WarpTerminal: 'Warp',
+  vscode: 'VS Code',
+  'iTerm.app': 'iTerm2',
+}
+// Terminals that draw Claude Code's pictures once it is told to (tested).
+const FORCEABLE = /^(iTerm2|Rio)\b/
+
+function explainDeny(deny: string, termProgram: string | undefined): Blocked {
+  const elsewhere = 'Open Claude Code in Ghostty or kitty to see pictures.'
   if (deny.includes('bg worker')) {
-    return "this session runs in Claude Code's background worker, which doesn't pass pictures to the terminal; a session started directly in the terminal can show them"
+    return {
+      why: "This session runs in Claude Agents, which can't pass pictures to the terminal.",
+      fix: 'Start claude directly in a Ghostty or kitty window to see them.',
+    }
   }
-  if (deny.includes('no placeholder images')) {
-    return "the terminal doesn't draw kitty placeholder images; Ghostty and kitty do"
+  if (deny.includes('tmux or screen')) {
+    return {
+      why: "This session runs inside tmux or screen, and Claude Code doesn't send pictures through them.",
+      fix: 'Run claude outside tmux, in Ghostty or kitty.',
+    }
+  }
+  const named = deny.match(/, terminal ([^)]+)\)/)?.[1]?.trim()
+  const terminal = named ?? (termProgram === undefined ? undefined : (TERMINAL_NAMES[termProgram] ?? termProgram))
+  if (terminal?.startsWith('kitty')) {
+    return { why: `Claude Code shows pictures in kitty 0.28 and newer, and this is ${terminal}.`, fix: 'Update kitty.' }
+  }
+  if (deny.includes('graphics reply') && terminal !== undefined) {
+    return FORCEABLE.test(terminal)
+      ? {
+          why: `Claude Code only turns pictures on in Ghostty and kitty, and this is ${terminal}.`,
+          fix: `${terminal.split(' ')[0]} can show them: start Claude Code with CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1.`,
+        }
+      : { why: `Claude Code only shows pictures in Ghostty and kitty, and this is ${terminal}.`, fix: elsewhere }
+  }
+  if (deny.includes('no reply to the graphics query')) {
+    return { why: `${terminal ?? 'This terminal'} doesn't support kitty graphics, which Claude Code draws pictures with.`, fix: elsewhere }
   }
 
-  return deny
+  return { why: `Claude Code can't draw pictures here (${deny.replace(/^.*?: /, '')}).`, fix: elsewhere }
 }
 
 async function runProbe($: EngineInterface, attempt = 0) {
@@ -247,7 +281,10 @@ async function runProbe($: EngineInterface, attempt = 0) {
       .blit({ ...site, source: { png: PROBE_BYTES } })
       .catch((err: Error) => ({ deny: err.message }))
     probe.verdict = byBytes.deny === undefined ? 'bytes' : 'none'
-    probe.reason = explainDeny(byBytes.deny ?? byFile.deny)
+    if (probe.verdict === 'none') {
+      const termProgram = await $.env.get('TERM_PROGRAM').catch(() => undefined)
+      probe.blocked = explainDeny(byBytes.deny ?? byFile.deny ?? '', termProgram)
+    }
   }
   probe.phase = 'done'
   transport = undefined
@@ -298,104 +335,13 @@ async function imageSource($: EngineInterface, png: string): Promise<ImageSource
   return { png: base64 }
 }
 
-// Where the terminal can't draw pictures (Claude Agents' background worker,
-// Terminal.app, Warp, VS Code) the picture is drawn as text: one ▀ per cell,
-// its foreground the upper pixel and its background the lower one.
-// Claude Code paints those cells with 4 bits per channel, which turns smooth
-// gradients into wide bands, so each channel is ordered-dithered onto those
-// 16 levels first and the steps become a fine pattern instead.
-const HALF_BLOCK = 0x2580
-const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]
-
-function dither(value: number, x: number, y: number) {
-  const threshold = (BAYER[(x & 3) + (y & 3) * 4]! + 0.5) / 16
-
-  return Math.min(15, Math.floor(value / 17 + threshold)) * 17
-}
-const cellsOf = new Map<string, string>()
-
-function decodeBase64(text: string) {
-  const binary = atob(text)
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i)
-  }
-
-  return bytes
-}
-
-function encodeBase64(bytes: Uint8Array) {
-  let binary = ''
-  for (let i = 0; i < bytes.length; i += 0x8000) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
-  }
-
-  return btoa(binary)
-}
-
-async function rasterCells($: EngineInterface, png: string, columns: number, rows: number) {
-  const cacheKey = `${png}:${columns}x${rows}`
-  const cached = cellsOf.get(cacheKey)
-  if (cached !== undefined) {
-    return cached
-  }
-  const ran = await $.process.run(['/bin/sh', `${$.plugin.root}/bin/raster.sh`, png, String(columns), String(rows * 2)])
-  if (ran.exitCode !== 0) {
-    throw new Error(ran.stderr.trim() || 'raster.sh failed')
-  }
-  const bmp = decodeBase64((await $.fs.read(ran.stdout.trim(), { as: 'bytes' })).base64)
-  const view = new DataView(bmp.buffer)
-  const offset = view.getUint32(10, true)
-  const width = view.getInt32(18, true)
-  const height = view.getInt32(22, true)
-  const step = view.getUint16(28, true) / 8
-  const stride = Math.floor((step * 8 * width + 31) / 32) * 4
-  const pixel = (x: number, y: number) => {
-    const row = height < 0 ? y : Math.abs(height) - 1 - y
-    const at = offset + row * stride + x * step
-
-    return (
-      (dither(bmp[at + 2] ?? 0, x, y) << 16) | (dither(bmp[at + 1] ?? 0, x, y) << 8) | dither(bmp[at] ?? 0, x, y)
-    )
-  }
-  const words = new Uint32Array(columns * rows * 3)
-  for (let y = 0; y < rows; y++) {
-    for (let x = 0; x < columns; x++) {
-      const at = (y * columns + x) * 3
-      words[at] = HALF_BLOCK
-      words[at + 1] = pixel(x, y * 2)
-      words[at + 2] = pixel(x, y * 2 + 1)
-    }
-  }
-  const cells = encodeBase64(new Uint8Array(words.buffer))
-  cellsOf.set(cacheKey, cells)
-  const oldest = cellsOf.keys().next().value
-  if (cellsOf.size > 128 && oldest !== undefined) {
-    cellsOf.delete(oldest)
-  }
-
-  return cells
-}
-
-const isTextOnly = () => transportSetting === 'text' || probe.verdict === 'none'
-
 type Draw = { key: string; png: string; columns: number; rows: number; alt: string }
 
-// A picture where the terminal draws them, coloured cells where it doesn't.
 async function picture($: EngineInterface, e: Parameters<EngineInterface['ui']['resolve']>[0], draw: Draw) {
   if (e.surface !== 'terminal') {
     return null
   }
-  const { Image, Raster, Text } = $.ui.resolve(e)
-  if (isTextOnly()) {
-    try {
-      const cells = await rasterCells($, draw.png, draw.columns, draw.rows)
-
-      return <Raster key={draw.key} columns={draw.columns} rows={draw.rows} cells={cells} />
-    } catch {
-      return <Text dimColor>{draw.alt}</Text>
-    }
-  }
+  const { Image } = $.ui.resolve(e)
 
   return (
     <Image key={draw.key} source={await imageSource($, draw.png)} columns={draw.columns} rows={draw.rows} alt={draw.alt} />
@@ -424,14 +370,10 @@ function playAnimation(
   key: string,
   frames: Frame[],
   maxLoops: number,
-  size: { columns: number; rows: number },
 ) {
   const id = `${requestId}/${key}`
   stopAnimation(id)
-  const show = async (frame: Frame) =>
-    isTextOnly()
-      ? $.ui.blit({ requestId, key, cells: await rasterCells($, frame.png, size.columns, size.rows) })
-      : $.ui.blit({ requestId, key, source: await imageSource($, frame.png) })
+  const show = async (frame: Frame) => $.ui.blit({ requestId, key, source: await imageSource($, frame.png) })
   const run: Animation = { frame: 0, loops: 0, misses: 0 }
   animations.set(id, run)
   const step = async () => {
@@ -465,14 +407,13 @@ function ensureAnimation(
   frames: Frame[] | undefined,
   maxLoops: number,
   started: Set<string>,
-  size: { columns: number; rows: number },
 ) {
   const id = `${requestId}/${key}`
   if (frames === undefined || frames.length < 2 || animations.has(id) || started.has(id)) {
     return
   }
   started.add(id)
-  playAnimation($, requestId, key, frames, maxLoops, size)
+  playAnimation($, requestId, key, frames, maxLoops)
 }
 
 // The pages around `page` that the viewer's sidebar shows, centred on it.
@@ -529,12 +470,39 @@ function openExternally($: EngineInterface, source: string) {
   void $.process.run(['/bin/sh', `${$.plugin.root}/bin/open.sh`, source]).catch(() => undefined)
 }
 
+// Drawn in place of the picture where the terminal can't show one: why, what
+// would fix it, and the file one press away in its own app.
+function blockedNotice(
+  $: EngineInterface,
+  { Box, Text, Button }: Elements['terminal'],
+  value: ImagePreview,
+  blocked: Blocked,
+  inPane: boolean,
+) {
+  return (
+    <Box flexDirection="column" borderStyle="round" borderColor="warning" paddingX={1}>
+      <Text wrap="truncate-middle">
+        <Text color="warning" bold>Can't show pictures here</Text> · {formatOf(value.source)} {nameOf(value.source)}
+        {pageLabel(value)}
+      </Text>
+      {value.caption && <Text dimColor italic wrap="truncate-end">{value.caption}</Text>}
+      <Text>{blocked.why}</Text>
+      <Text>{blocked.fix}</Text>
+      <Box flexDirection="row" gap={2}>
+        <Button key="open" label="↗ open in app" hotkey={inPane ? 'o' : undefined} onPress={() => openExternally($, value.source)} />
+        {inPane && <Text dimColor>esc close</Text>}
+      </Box>
+    </Box>
+  )
+}
+
 function unsupportedText(value: Extract<Preview, { kind: 'unsupported' }>) {
   return `Can't preview ${nameOf(value.source)}: ${value.reason}. Supported: ${SUPPORTED}.`
 }
 
 export const register: Register = (on, options: PluginOptions) => {
   transport = undefined
+  Object.assign(probe, { phase: 'idle', bandId: undefined, verdict: undefined, blocked: undefined })
   transportSetting = options.transport ?? 'auto'
   // Animations started this load: a redraw must not restart one that finished.
   const started = new Set<string>()
@@ -627,13 +595,11 @@ export const register: Register = (on, options: PluginOptions) => {
     const how = input.mode === 'viewer' ? ' in the viewer pane' : ''
     const note = shown.note ? ` Note: ${shown.note}.` : ''
 
-    if (probe.verdict === 'none') {
-      const reason = probe.reason ?? 'no kitty graphics'
+    if (probe.blocked !== undefined) {
       return {
         result:
-          `Shown to the user${how} as a low-resolution colour-block preview of ${input.path}${where}: ` +
-          `real pictures can't draw here (${reason}), so fine detail and small text won't be legible to ` +
-          'them. Describe what matters if it depends on detail.',
+          `Not shown: ${probe.blocked.why} The user sees a notice saying so, with a button to open ` +
+          `${input.path}${where} in their default app. If what it shows matters, describe it in words.`,
       }
     }
     return { result: `Shown to the user${how}: ${input.path}${where}.${note}` }
@@ -641,7 +607,8 @@ export const register: Register = (on, options: PluginOptions) => {
 
   on('tool.call', { tool: 'Read' }, async ($, e, next) => {
     const ran = await next(e)
-    if (ran.deny !== undefined || ran.isError || !AUTO.test(e.file_path)) {
+    // Where pictures can't draw, a notice on every Read would only be noise.
+    if (ran.deny !== undefined || ran.isError || !AUTO.test(e.file_path) || probe.blocked !== undefined) {
       return ran
     }
     const value = await preview($, e.file_path, firstPage(e.pages))
@@ -704,7 +671,7 @@ export const register: Register = (on, options: PluginOptions) => {
         <Box flexDirection="column">
           <Text dimColor>
             asset-viewer test · probe: {probe.verdict ?? probe.phase}
-            {probe.reason ? ` (${probe.reason})` : ''} · transport: {await transportOf($)}
+            {probe.blocked ? ` (${probe.blocked.why})` : ''} · transport: {await transportOf($)}
           </Text>
           <Box flexDirection="row" gap={2}>
             {variants.map(v => (
@@ -722,11 +689,15 @@ export const register: Register = (on, options: PluginOptions) => {
       )
     }
 
+    if (probe.blocked !== undefined) {
+      return blockedNotice($, $.ui.resolve(e), value, probe.blocked, false)
+    }
+
     const columns = (e.viewport?.columns ?? 100) - 10
     const box = boxFor(value, columns, value.size === 'small' ? 16 : 36, WIDTH[value.size ?? 'medium'])
     const cardWidth = Math.max(box.columns, 34) + 4
     const isPaged = value.pages > 1
-    ensureAnimation($, id, 'pic', value.frames, INLINE_LOOPS, started, box)
+    ensureAnimation($, id, 'pic', value.frames, INLINE_LOOPS, started)
 
     return (
       <Box flexDirection="column" borderStyle="round" borderColor="subtle" paddingX={1} width={cardWidth}>
@@ -754,7 +725,7 @@ export const register: Register = (on, options: PluginOptions) => {
               label="↻ replay"
               plain
               dimColor
-              onPress={() => playAnimation($, id, 'pic', value.frames ?? [], INLINE_LOOPS, box)}
+              onPress={() => playAnimation($, id, 'pic', value.frames ?? [], INLINE_LOOPS)}
             />
           )}
           <Button key="viewer" label="⤢ viewer" plain dimColor onPress={() => openViewer($, value)} />
@@ -790,6 +761,9 @@ export const register: Register = (on, options: PluginOptions) => {
       return <Text dimColor>Nothing open. Use /view &lt;path&gt;.</Text>
     }
     const p = state.preview
+    if (probe.blocked !== undefined) {
+      return blockedNotice($, $.ui.resolve(e), p, probe.blocked, true)
+    }
     const isPaged = p.pages > 1
     const inner = Math.max(20, e.props.bodyColumns - 4)
     const bodyRows = Math.max(12, (e.viewport?.rows ?? 30) - 10)
@@ -808,7 +782,7 @@ export const register: Register = (on, options: PluginOptions) => {
       ),
     )
     const go = (page: number) => turnViewer($, p, page)
-    ensureAnimation($, PANE, 'page', p.frames, Number.POSITIVE_INFINITY, started, box)
+    ensureAnimation($, PANE, 'page', p.frames, Number.POSITIVE_INFINITY, started)
 
     return (
       <Box flexDirection="column" borderStyle="round" borderColor="claude" paddingX={1}>

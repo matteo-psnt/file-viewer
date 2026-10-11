@@ -1,22 +1,22 @@
 # asset-viewer
 
-Claude Code can read a PDF or a screenshot, but you can't see it in the conversation. This plugin draws the file inline, right under the tool call, so you and Claude are looking at the same slide.
+A Claude Code plugin that shows PDFs, slides, spreadsheets and images inline, right in the conversation.
 
-It adds a `preview` tool Claude can call whenever seeing a file would help (a plot it just made, the lecture slide it's explaining, page 4 of your report). Reading an image or PDF previews it automatically, and `/view <path>` opens a full viewer you can page through from the keyboard.
+Claude Code can read a PDF or a screenshot, but you never see it. With this plugin Claude puts the page under its message, so when it talks about the chart on slide 12 you're looking at slide 12 too. Reading an image or PDF shows a small preview on its own, and `/view <path>` opens a viewer you can page through from the keyboard.
 
 <!-- demo.gif goes here -->
 
 ## Install
 
+In Claude Code:
+
 ```
 /plugin install asset-viewer --marketplace matteo-psnt/asset-viewer
 ```
 
-Answer `y` to add the marketplace, then pick the user scope. It loads in every session after that.
+On a Claude Code older than 2.1.275, add the marketplace first with `/plugin marketplace add matteo-psnt/asset-viewer`, then run `/plugin install asset-viewer@asset-viewer`.
 
-You need a terminal Claude Code will draw pictures in. Out of the box that's [Ghostty](https://ghostty.org) and [kitty](https://sw.kovidgoyal.net/kitty/) 0.28 or newer; iTerm2 and Rio work too once you turn on `CLAUDE_CODE_FORCE_TERMINAL_IMAGES` (see below). Anywhere else the preview is a short notice saying why pictures can't show there and what would fix it, with a button that opens the file in its own app. Run `sh bin/doctor.sh` from the plugin folder in the terminal you use Claude Code in, and it tells you what works and what to install.
-
-On macOS, install the converters with Homebrew:
+The plugin turns files into pictures with a few command-line tools. On macOS:
 
 ```
 brew install poppler librsvg imagemagick
@@ -30,76 +30,62 @@ sudo apt install poppler-utils librsvg2-bin imagemagick libheif1 unzip
 sudo apt install libreoffice-writer libreoffice-impress libreoffice-calc libreoffice-math
 ```
 
-> **Install LibreOffice if you open Word, PowerPoint or Excel files.** It's what turns them into exact pages. On Linux the plugin can't show them without it, and `libreoffice-math` is needed or Word equations come out blank. On macOS the plugin falls back to Quick Look and headless Chrome, which gets every page but only an approximate layout, and drops equations. The viewer says so under any page drawn that way.
+LibreOffice is the big download, and it's only for Word, PowerPoint and Excel files. On Linux those won't open without it. On macOS the plugin falls back to Quick Look and headless Chrome, which gets every page but only roughly the right layout, and it loses equations.
 
-## Where it works
+To check what you have and whether your terminal can show pictures, run `sh bin/doctor.sh` from the plugin's folder.
 
-Claude Code decides which terminals get pictures: it asks the terminal for its name and turns pictures on only for Ghostty and kitty 0.28+. Other terminals are turned away by name, even ones that could draw them, unless you turn that check off. Add this to `~/.claude/settings.json` and restart Claude Code:
+## Terminals
+
+Claude Code only draws pictures in [Ghostty](https://ghostty.org) and [kitty](https://sw.kovidgoyal.net/kitty/) 0.28 or newer. It decides by asking the terminal its name, so iTerm2 and Rio get turned away even though they draw the pictures fine. You can tell Claude Code to skip that check by adding this to `~/.claude/settings.json` and restarting it:
 
 ```json
 {
-  "env": {
-    "CLAUDE_CODE_FORCE_TERMINAL_IMAGES": "1"
-  }
+  "env": { "CLAUDE_CODE_FORCE_TERMINAL_IMAGES": "1" }
 }
 ```
 
-The setting makes Claude Code draw pictures in any terminal and assume the terminal can read this computer's files. It applies to every terminal you run Claude Code in, and to Claude Agents sessions, so add it only if you use Ghostty, kitty, iTerm2 or Rio. In a terminal that can't draw pictures you'll see stray characters instead, and over ssh pictures won't load. To turn it on for one terminal only, set it in that terminal's profile or shell instead (`export CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1`). I've tested the rows marked tested on macOS; the rest come from each terminal's docs, so trust `doctor.sh` over them.
+The same setting turns pictures on in Claude Agents sessions (the ones you open with `<<`), which have them off by default. It applies everywhere you run Claude Code, though, so if you also use a terminal that can't draw pictures you'll see stray characters there. In that case set it in the one terminal's profile instead.
 
-| Terminal | Pictures | Notes |
-| --- | --- | --- |
-| Ghostty | Yes | Tested |
-| kitty 0.28+ | Yes | The protocol's home |
-| iTerm2 | With the setting | Tested (3.7.4): turned away by name, draws correctly when forced |
-| Rio | With the setting | Tested (0.5.28): turned away by name, draws correctly with the setting in settings.json |
-| Warp | No | Tested: draws kitty images but shows the placeholders as raw characters |
-| WezTerm, Konsole, VS Code | No | They draw kitty images but not the placeholders Claude Code uses |
-| Terminal.app, Alacritty, Windows Terminal, foot | No | No kitty graphics (tested Terminal.app) |
-| tmux, screen | No | Claude Code doesn't send pictures through them |
+| Terminal | Pictures |
+| --- | --- |
+| Ghostty, kitty 0.28+ | Yes |
+| iTerm2, Rio, Claude Agents sessions | With the setting above |
+| Warp, WezTerm, Konsole, VS Code | No. They draw kitty images but not the placeholders Claude Code uses |
+| Terminal.app, Alacritty, Windows Terminal, foot | No kitty graphics |
+| tmux, screen | No. Claude Code doesn't send pictures through them |
 
-Sessions in Claude Agents (opened with `<<`) run in Claude Code's background daemon, where Claude Code turns pictures off by default. The same setting turns them back on: I tested it in a Claude Agents session in Ghostty and pictures draw as they do in a normal session. Without it, the preview is a notice naming Claude Agents as the reason.
+I tested Ghostty, iTerm2 3.7.4, Rio 0.5.28, Warp, Terminal.app and Claude Agents on macOS. The other rows come from each terminal's docs.
 
-Wherever pictures can't show, Claude is told so in the tool result, with the reason, and describes what matters in words instead.
+Where pictures can't show, the preview is a short notice saying why and what would fix it, with a button to open the file in its own app. Claude gets the same message, so it describes the file in words instead.
 
-Over ssh the terminal can't read files on the remote machine, so the plugin sends the picture's bytes instead. It does the same under WSL. If it guesses wrong for your setup, set "Image transport" to `bytes` or `file` in `/config`.
+Over ssh and under WSL the terminal can't read this machine's files, so the plugin sends the picture's bytes instead. If it guesses wrong, set "Image transport" to `bytes` or `file` in `/config`. Native Windows, the desktop app and the VS Code extension aren't supported.
 
-It runs on macOS and Linux. Native Windows isn't supported; WSL is, with a terminal from the "Yes" rows. The Claude desktop app and the VS Code extension don't show pictures, since the image element only exists in the terminal.
-
-## What it shows
+## What it opens
 
 | Type | How |
 | --- | --- |
-| PDF | One page at a time, any page, with paging |
+| PDF | Any page, with paging |
 | Word, PowerPoint, Excel, RTF, OpenDocument | Every page or slide, converted to PDF once and cached |
 | PNG, JPEG, HEIC, AVIF, WebP, TIFF, BMP, PSD, camera RAW | `sips` on macOS, ImageMagick on Linux (HEIC there needs libheif) |
-| Animated GIF and WebP | Plays frame by frame with the file's own timing |
-| SVG | Rendered with `rsvg-convert` on white |
-| Keynote, Pages, Numbers | First page only, since that's all the file's preview holds |
+| Animated GIF and WebP | Plays with the file's own timing |
+| SVG | Drawn on white with `rsvg-convert` |
+| Keynote, Pages, Numbers | First page only, since that's all the file's own preview holds |
 
-Text files (code, Markdown, CSV) aren't previewed because Claude Code already shows them. Anything else gets a one-line warning saying it can't be previewed and what can, and Claude gets the same message.
+Text files like code, Markdown and CSV aren't previewed, since Claude Code already shows them.
 
 ## Using it
 
-Ask for it in plain words: "show me slide 12 of the Bayes nets lecture" or "open my report in the viewer". Claude picks the tool up on its own when a picture would help.
+Ask for it in plain words, like "show me slide 12 of the lecture" or "open my report in the viewer". Claude also uses it on its own when a picture would help, say after it makes a plot.
 
-Each preview is a small card with the file type, name and page count on top and a row of controls under the picture: ◀ ▶ to page, replay for animations, viewer to open the full viewer, and open to hand the file to its own app. Clicking them needs a terminal that reports mouse clicks to Claude Code, which fullscreen mode does.
+Each preview is a card with the file's name and page count, and controls under the picture to turn the page, replay an animation, open the viewer, or open the file in its own app. Clicking them needs a terminal that reports mouse clicks to Claude Code, which fullscreen mode does.
 
-The viewer pane shows the current page large with a sidebar of the pages around it, and takes the keyboard while it's open:
-
-| Key | Does |
-| --- | --- |
-| `↑` / `↓` | Previous or next page (the focus walks the sidebar) |
-| `p` / `n` | Previous or next page |
-| `o` | Open the file in its default app |
-| `Esc` | Close |
-
-Clicking a page in the sidebar jumps to it.
+The viewer shows one page large with the pages around it in a sidebar. While it's open, `↑` and `↓` (or `p` and `n`) turn pages, `o` opens the file in its own app, and `Esc` closes it. Clicking a page in the sidebar jumps there.
 
 ## How it works
 
-`bin/render.sh` turns a file into a PNG (or a folder of frames) under `~/Library/Caches/asset-viewer` (or `~/.cache/asset-viewer` on Linux), keyed by path, modification time and page, so the second look at anything is instant. The page after the one you're on is rendered ahead of time.
+`bin/render.sh` turns a file into a PNG, or a folder of frames for an animation, and caches it under `~/Library/Caches/asset-viewer` (`~/.cache/asset-viewer` on Linux) by path, modification time and page. It renders the next page ahead of time, so paging forward is instant.
 
-`hooks/register.tsx` is a Claude Code function-hooks module. It registers the tool, draws each preview by hooking the `ToolResult` row with an `Image` element, and animates GIFs by swapping that image's source with `$.ui.blit` on a timer. Previews are saved to the plugin store, so a resumed conversation draws them again. If the cache got cleared in between, the row re-renders the file.
+`hooks/register.tsx` is the plugin itself, a Claude Code hooks module. It registers the `preview` tool and `/view`, draws each preview in place of the tool's output, and plays animations by swapping the picture on a timer. Previews are saved, so a resumed conversation shows them again.
 
 ## Developing
 
@@ -109,7 +95,7 @@ claude plugin marketplace add ./asset-viewer
 claude plugin install asset-viewer@asset-viewer
 ```
 
-A marketplace added from a folder is read from that folder, so edits show up after `/reload-plugins` with no reinstall. Check your changes with:
+A marketplace added from a folder reads from that folder, so your edits load after `/reload-plugins`. Before sending a change, run:
 
 ```
 claude plugin validate .
@@ -117,9 +103,9 @@ claude plugin test .
 sh tests/converter.sh
 ```
 
-The first two check the hooks module against Claude Code itself. The last runs the converter over the files in `tests/fixtures`, and CI runs it on both macOS and Ubuntu.
+The first two check the hooks module against Claude Code. The last runs the converter over `tests/fixtures`, and CI runs it on macOS and Ubuntu.
 
-The plugin API this is built on is in early access and may change between Claude Code releases.
+The plugin API this uses is in early access, so a Claude Code update can break it.
 
 ## License
 

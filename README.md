@@ -20,15 +20,17 @@ On macOS, install the converters with Homebrew:
 
 ```
 brew install poppler librsvg imagemagick
+brew install --cask libreoffice
 ```
 
 On Debian or Ubuntu:
 
 ```
 sudo apt install poppler-utils librsvg2-bin imagemagick libheif1 unzip
+sudo apt install libreoffice-writer libreoffice-impress libreoffice-calc libreoffice-math
 ```
 
-LibreOffice is what turns Word, PowerPoint and Excel files into pages. On Linux it's required (`libreoffice-writer`, `libreoffice-impress`, `libreoffice-calc`, plus `libreoffice-math` or Word equations come out blank). On macOS it's optional (`brew install --cask libreoffice`): without it the plugin goes through Quick Look and headless Chrome, which gets every page but only an approximate layout and drops equations.
+> **Install LibreOffice if you open Word, PowerPoint or Excel files.** It's what turns them into exact pages. On Linux the plugin can't show them without it, and `libreoffice-math` is needed or Word equations come out blank. On macOS the plugin falls back to Quick Look and headless Chrome, which gets every page but only an approximate layout, and drops equations. The viewer says so under any page drawn that way.
 
 ## Where it works
 

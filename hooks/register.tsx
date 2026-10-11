@@ -479,8 +479,11 @@ function blockedNotice(
   blocked: Blocked,
   inPane: boolean,
 ) {
+  // The pane has a border of its own; a second one costs rows a short window lacks.
+  const frame = inPane ? {} : ({ borderStyle: 'round', borderColor: 'warning', paddingX: 1 } as const)
+
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor="warning" paddingX={1}>
+    <Box flexDirection="column" {...frame}>
       <Text wrap="truncate-middle">
         <Text color="warning" bold>Can't show pictures here</Text> · {formatOf(value.source)} {nameOf(value.source)}
         {pageLabel(value)}

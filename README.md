@@ -40,7 +40,7 @@ Claude Code decides which terminals get pictures: it asks the terminal for its n
 | kitty 0.28+ | Yes | The protocol's home |
 | iTerm2 | With the env var | Tested (3.7.4): turned away by name, draws correctly when forced |
 | Rio | With the env var | Tested (0.5.28): turned away by name, draws correctly when forced |
-| Warp | No | Tested: forced, it shows the placeholders as raw characters |
+| Warp | No | Tested: draws kitty images but shows the placeholders as raw characters |
 | WezTerm, Konsole, VS Code | No | They draw kitty images but not the placeholders Claude Code uses |
 | Terminal.app, Alacritty, Windows Terminal, foot | No | No kitty graphics (tested Terminal.app) |
 | tmux, screen | No | Claude Code doesn't send pictures through them |

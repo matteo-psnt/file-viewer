@@ -5,8 +5,8 @@ import type { Frame, Preview, Size, Thumb, Viewer } from '../types'
 
 type ImagePreview = Extract<Preview, { kind: 'image' }>
 
-const TOOL = 'show'
-const FULL_TOOL = 'mcp__asset-viewer__show'
+const TOOL = 'preview'
+const FULL_TOOL = 'mcp__asset-viewer__preview'
 const PANE = 'asset-viewer'
 const STORE_INDEX = 'previews:index'
 const STORE_KEEP = 500

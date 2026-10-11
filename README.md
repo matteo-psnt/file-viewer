@@ -2,7 +2,7 @@
 
 Claude Code can read a PDF or a screenshot, but you can't see it in the conversation. This plugin draws the file inline, right under the tool call, so you and Claude are looking at the same slide.
 
-It adds a `show` tool Claude can call whenever seeing a file would help (a plot it just made, the lecture slide it's explaining, page 4 of your report). Reading an image or PDF previews it automatically, and `/view <path>` opens a full viewer you can page through from the keyboard.
+It adds a `preview` tool Claude can call whenever seeing a file would help (a plot it just made, the lecture slide it's explaining, page 4 of your report). Reading an image or PDF previews it automatically, and `/view <path>` opens a full viewer you can page through from the keyboard.
 
 <!-- demo.gif goes here -->
 

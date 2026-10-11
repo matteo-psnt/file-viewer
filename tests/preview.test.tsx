@@ -12,7 +12,7 @@ const page = (n: number, note = '-') =>
 
 const result = (id: string, output: unknown) => ({
   tool_use_id: id,
-  tool: 'mcp__asset-viewer__show',
+  tool: 'mcp__asset-viewer__preview',
   output,
   isErrored: false,
 })
@@ -23,7 +23,7 @@ test('a deck shows inline without its note and pages with the buttons', async ($
   on('process.run', (_$, e) => page(Number(e.argv[3]), 'approximate layout (Quick Look)'))
 
   const ran = await $.tool.call({
-    tool: 'mcp__asset-viewer__show',
+    tool: 'mcp__asset-viewer__preview',
     tool_use_id: 'call-1',
     path: '/notes/deck.pptx',
     page: 3,
@@ -52,7 +52,7 @@ test('unsupported and text files are reported inline and to the model', async ($
   on('fs.exists', () => ({ value: true }))
   on('process.run', () => failed('.zip is not a supported type'))
 
-  const zip = await $.tool.call({ tool: 'mcp__asset-viewer__show', tool_use_id: 'z', path: '/a/sub.zip' })
+  const zip = await $.tool.call({ tool: 'mcp__asset-viewer__preview', tool_use_id: 'z', path: '/a/sub.zip' })
   expect(zip.result).toMatch(/^Can't preview sub\.zip: \.zip is not a supported type\. Supported:/)
   const ui = await $.ui.mount({
     plugin: 'asset-viewer',
@@ -63,7 +63,7 @@ test('unsupported and text files are reported inline and to the model', async ($
   })
   expect(await ui.find({ type: 'Text', text: /Can't preview sub\.zip/ })).toBeDefined()
 
-  const py = await $.tool.call({ tool: 'mcp__asset-viewer__show', path: '/a/main.py' })
+  const py = await $.tool.call({ tool: 'mcp__asset-viewer__preview', path: '/a/main.py' })
   expect(py.result).toMatch(/\.py is a text file, which Claude Code already shows/)
 })
 
@@ -84,7 +84,7 @@ test('an animated gif plays by swapping frames', async ($, on) => {
     return { value: {} }
   })
 
-  await $.tool.call({ tool: 'mcp__asset-viewer__show', tool_use_id: 'g', path: '/a/spin.gif' })
+  await $.tool.call({ tool: 'mcp__asset-viewer__preview', tool_use_id: 'g', path: '/a/spin.gif' })
   await $.ui.mount({
     plugin: 'asset-viewer',
     surface: 'terminal',
@@ -104,7 +104,7 @@ test('the viewer shows a sidebar of pages and turns with the arrow keys', async 
   on('process.run', (_$, e) => page(Number(e.argv[3])))
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('ui.focus', () => ({}))
-  await $.tool.call({ tool: 'mcp__asset-viewer__show', path: '/notes/deck.pptx', page: 6, mode: 'viewer' })
+  await $.tool.call({ tool: 'mcp__asset-viewer__preview', path: '/notes/deck.pptx', page: 6, mode: 'viewer' })
 
   const ui = await $.ui.mount({
     plugin: 'asset-viewer',
@@ -178,7 +178,7 @@ test('a preview whose cached PNG is gone is rendered again', async ($, on) => {
 const ONE_PIXEL = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
 
 const pngTool = (id: string) =>
-  ({ tool: 'mcp__asset-viewer__show', tool_use_id: id, path: '/a/pic.png' }) as const
+  ({ tool: 'mcp__asset-viewer__preview', tool_use_id: id, path: '/a/pic.png' }) as const
 
 test('over ssh the picture is sent as bytes', async ($, on) => {
   mock.store(on)
@@ -227,7 +227,7 @@ async function startRefused(...[$, on, deny]: [...Parameters<TestBody>, string])
   on('ui.blit', () => ({ value: { deny } }))
   on('fs.write', () => ({ value: undefined }))
   on('session.start', () => ({ cwd: '/a' }))
-  on('tool.register', () => ({ value: { tool: 'mcp__asset-viewer__show' } }))
+  on('tool.register', () => ({ value: { tool: 'mcp__asset-viewer__preview' } }))
   on('command.register', () => ({ value: { command: 'view' } }))
   await $.session.start({ cwd: '/a', surface: 'terminal', isInteractive: true } as never)
   await $.ui.mount({ plugin: 'asset-viewer', surface: 'terminal', component: 'AbovePrompt', requestId: 'band', props: {} as never })

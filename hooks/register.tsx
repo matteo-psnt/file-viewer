@@ -301,7 +301,17 @@ async function imageSource($: EngineInterface, png: string): Promise<ImageSource
 // Where the terminal can't draw pictures (Claude Agents' background worker,
 // Terminal.app, Warp, VS Code) the picture is drawn as text: one ▀ per cell,
 // its foreground the upper pixel and its background the lower one.
+// Claude Code paints those cells with 4 bits per channel, which turns smooth
+// gradients into wide bands, so each channel is ordered-dithered onto those
+// 16 levels first and the steps become a fine pattern instead.
 const HALF_BLOCK = 0x2580
+const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]
+
+function dither(value: number, x: number, y: number) {
+  const threshold = (BAYER[(x & 3) + (y & 3) * 4]! + 0.5) / 16
+
+  return Math.min(15, Math.floor(value / 17 + threshold)) * 17
+}
 const cellsOf = new Map<string, string>()
 
 function decodeBase64(text: string) {
@@ -344,7 +354,9 @@ async function rasterCells($: EngineInterface, png: string, columns: number, row
     const row = height < 0 ? y : Math.abs(height) - 1 - y
     const at = offset + row * stride + x * step
 
-    return ((bmp[at + 2] ?? 0) << 16) | ((bmp[at + 1] ?? 0) << 8) | (bmp[at] ?? 0)
+    return (
+      (dither(bmp[at + 2] ?? 0, x, y) << 16) | (dither(bmp[at + 1] ?? 0, x, y) << 8) | dither(bmp[at] ?? 0, x, y)
+    )
   }
   const words = new Uint32Array(columns * rows * 3)
   for (let y = 0; y < rows; y++) {

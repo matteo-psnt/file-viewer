@@ -242,7 +242,7 @@ function explainDeny(deny: string, termProgram: string | undefined): Blocked {
     return FORCEABLE.test(terminal)
       ? {
           why: `Claude Code only turns pictures on in Ghostty and kitty, and this is ${terminal}.`,
-          fix: `${terminal.split(' ')[0]} can show them: start Claude Code with CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1.`,
+          fix: `${terminal.split(' ')[0]} can show them: add "CLAUDE_CODE_FORCE_TERMINAL_IMAGES": "1" to env in ~/.claude/settings.json and restart Claude Code.`,
         }
       : { why: `Claude Code only shows pictures in Ghostty and kitty, and this is ${terminal}.`, fix: elsewhere }
   }

@@ -265,5 +265,5 @@ test('iTerm2 is told how to turn pictures on', async ($, on) => {
   const ui = await $.ui.mount({
     plugin: 'asset-viewer', surface: 'terminal', component: 'ToolResult', requestId: 'b2', props: result('b2', ran.result),
   })
-  expect(await ui.find({ type: 'Text', text: /CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /"CLAUDE_CODE_FORCE_TERMINAL_IMAGES": "1" to env in ~\/\.claude\/settings\.json/ })).toBeDefined()
 })

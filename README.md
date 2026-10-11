@@ -14,7 +14,7 @@ It adds a `show` tool Claude can call whenever seeing a file would help (a plot 
 
 Answer `y` to add the marketplace, then pick the user scope. It loads in every session after that.
 
-You need a terminal Claude Code will draw pictures in. Out of the box that's [Ghostty](https://ghostty.org) and [kitty](https://sw.kovidgoyal.net/kitty/) 0.28 or newer; iTerm2 and Rio work too once you start Claude Code with `CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1`. Anywhere else the preview is a short notice saying why pictures can't show there and what would fix it, with a button that opens the file in its own app. Run `sh bin/doctor.sh` from the plugin folder in the terminal you use Claude Code in, and it tells you what works and what to install.
+You need a terminal Claude Code will draw pictures in. Out of the box that's [Ghostty](https://ghostty.org) and [kitty](https://sw.kovidgoyal.net/kitty/) 0.28 or newer; iTerm2 and Rio work too once you turn on `CLAUDE_CODE_FORCE_TERMINAL_IMAGES` (see below). Anywhere else the preview is a short notice saying why pictures can't show there and what would fix it, with a button that opens the file in its own app. Run `sh bin/doctor.sh` from the plugin folder in the terminal you use Claude Code in, and it tells you what works and what to install.
 
 On macOS, install the converters with Homebrew:
 
@@ -32,14 +32,24 @@ LibreOffice is what turns Word, PowerPoint and Excel files into pages. On Linux 
 
 ## Where it works
 
-Claude Code decides which terminals get pictures: it asks the terminal for its name and turns pictures on only for Ghostty and kitty 0.28+. Other terminals are turned away by name, even ones that could draw them, unless `CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1` is set. I've tested the rows marked tested on macOS; the rest come from each terminal's docs, so trust `doctor.sh` over them.
+Claude Code decides which terminals get pictures: it asks the terminal for its name and turns pictures on only for Ghostty and kitty 0.28+. Other terminals are turned away by name, even ones that could draw them, unless you turn that check off. Add this to `~/.claude/settings.json` and restart Claude Code:
+
+```json
+{
+  "env": {
+    "CLAUDE_CODE_FORCE_TERMINAL_IMAGES": "1"
+  }
+}
+```
+
+The setting makes Claude Code draw pictures in any terminal and assume the terminal can read this computer's files. It applies to every terminal you run Claude Code in, so add it only if all of them are Ghostty, kitty, iTerm2 or Rio. In a terminal that can't draw pictures you'll see stray characters instead, and over ssh pictures won't load. To turn it on for one terminal only, set it in that terminal's profile or shell instead (`export CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1`). I've tested the rows marked tested on macOS; the rest come from each terminal's docs, so trust `doctor.sh` over them.
 
 | Terminal | Pictures | Notes |
 | --- | --- | --- |
 | Ghostty | Yes | Tested |
 | kitty 0.28+ | Yes | The protocol's home |
-| iTerm2 | With the env var | Tested (3.7.4): turned away by name, draws correctly when forced |
-| Rio | With the env var | Tested (0.5.28): turned away by name, draws correctly when forced |
+| iTerm2 | With the setting | Tested (3.7.4): turned away by name, draws correctly when forced |
+| Rio | With the setting | Tested (0.5.28): turned away by name, draws correctly with the setting in settings.json |
 | Warp | No | Tested: draws kitty images but shows the placeholders as raw characters |
 | WezTerm, Konsole, VS Code | No | They draw kitty images but not the placeholders Claude Code uses |
 | Terminal.app, Alacritty, Windows Terminal, foot | No | No kitty graphics (tested Terminal.app) |

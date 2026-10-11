@@ -140,7 +140,8 @@ else:
         print("    known cases). Previews show a notice instead of the picture.")
     elif not allowed and not os.environ.get("CLAUDE_CODE_FORCE_TERMINAL_IMAGES"):
         print(f"  {yellow} This terminal draws pictures, but Claude Code only turns them on for")
-        print("    Ghostty and kitty. Start Claude Code with CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1.")
+        print("    Ghostty and kitty. Add \"CLAUDE_CODE_FORCE_TERMINAL_IMAGES\": \"1\" to \"env\" in")
+        print("    ~/.claude/settings.json and restart Claude Code.")
     elif "i=32;OK" in text:
         print(f"  {green} Kitty graphics with placeholders and local files. Everything works.")
     else:

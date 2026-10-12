@@ -810,11 +810,13 @@ export const register: Register = (on, options: PluginOptions) => {
         {await picture($, e, { key: 'page', png: p.png, ...box, alt: `[${nameOf(p.source)}${pageLabel(p)}]` })}
       </Box>
     )
-    // Footer: the buttons always, then as much of the key hint as fits.
+    // Footer: the buttons always, then as much of the key hint as fits. The
+    // keys only reach the pane while it holds the keyboard, so say how to get it.
     const buttonsWidth = (isPaged ? 18 : 0) + 14
-    const hint = [isPaged ? '↑↓ pages · esc close' : '', 'esc close'].find(
-      h => h !== '' && buttonsWidth + 2 + h.length <= inner,
-    )
+    const hints = e.props.isFocused
+      ? [isPaged ? '↑↓ pages · esc close' : '', 'esc close']
+      : ['ctrl+x tab to use keys', 'ctrl+x tab']
+    const hint = hints.find(h => h !== '' && buttonsWidth + 2 + h.length <= inner)
     ensureAnimation($, PANE, 'page', p.frames, Number.POSITIVE_INFINITY, started)
 
     return (

@@ -11,7 +11,6 @@ const PANE = 'asset-viewer'
 const STORE_INDEX = 'previews:index'
 const STORE_KEEP = 500
 const KEEP = 100
-const AUTO = /\.(png|jpe?g|gif|heic|heif|avif|webp|tiff?|bmp|svgz?|pdf)$/i
 const TEXT = /\.(md|markdown|txt|csv|tsv|json|ya?ml|toml|xml|html?|css|log|ipynb|py|ts|tsx|js|jsx|java|c|h|cpp|hpp|cc|rs|go|rb|sh|zsh|sql|tex|scala|kt|swift|hs)$/i
 const SUPPORTED =
   'PDF; Word, PowerPoint and Excel (every page); images (png, jpg, heic, avif, webp, tiff, ' +
@@ -162,12 +161,6 @@ function boxFor(
   }
 
   return { columns, rows: Math.max(1, Math.min(rows, 255)) }
-}
-
-function firstPage(pages: string | undefined) {
-  const n = Number.parseInt(pages ?? '', 10)
-
-  return Number.isFinite(n) && n > 0 ? n : 1
 }
 
 function clampPage(p: ImagePreview, page: number) {
@@ -610,20 +603,6 @@ export const register: Register = (on, options: PluginOptions) => {
     return { result: `Shown to the user${how}: ${input.path}${where}.${note}` }
   })
 
-  on('tool.call', { tool: 'Read' }, async ($, e, next) => {
-    const ran = await next(e)
-    // Where pictures can't draw, a notice on every Read would only be noise.
-    if (ran.deny !== undefined || ran.isError || !AUTO.test(e.file_path) || probe.blocked !== undefined) {
-      return ran
-    }
-    const value = await preview($, e.file_path, firstPage(e.pages))
-    if (value.kind === 'image') {
-      await remember($, e.tool_use_id, { ...value, size: 'small' })
-    }
-
-    return ran
-  }).catch(($, e, next) => next(e))
-
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (probe.phase !== 'drawing' || e.surface !== 'terminal') {
       return next(e)
@@ -635,7 +614,7 @@ export const register: Register = (on, options: PluginOptions) => {
   })
 
   on('ui.render', { component: 'ToolResult' }, async ($, e, next) => {
-    if (e.props.isErrored || (e.props.tool !== 'Read' && e.props.tool !== FULL_TOOL)) {
+    if (e.props.isErrored || e.props.tool !== FULL_TOOL) {
       return next(e)
     }
     const value = await lookup($, e.requestId)

@@ -740,12 +740,21 @@ export const register: Register = (on, options: PluginOptions) => {
     )
   })
 
-  // Arrow keys walk the focus ring over the sidebar's page buttons; landing on
-  // one turns to that page.
+  // Arrow keys walk the focus ring over the thumbnails' page buttons; landing
+  // on one turns to that page. A plugin can only bind letters and digits, so
+  // this is how the arrows page at all.
   on('ui.focus', async ($, e, next) => {
-    const moved = await next(e)
     const page = e.element?.startsWith('thumb:') ? Number(e.element.slice(6)) : Number.NaN
-    if (e.requestId !== PANE || e.origin.kind !== 'person' || moved.deny !== undefined || !Number.isFinite(page)) {
+    if (e.requestId !== PANE || e.origin.kind !== 'person') {
+      return next(e)
+    }
+    // Past the first or last thumbnail the ring would walk on to the footer
+    // buttons or the close mark, and the arrows would stop paging. Keep it.
+    if (!Number.isFinite(page) && ((await read($, viewer))?.preview.pages ?? 0) > 1) {
+      return {}
+    }
+    const moved = await next(e)
+    if (moved.deny !== undefined || !Number.isFinite(page)) {
       return moved
     }
     const state = await read($, viewer)

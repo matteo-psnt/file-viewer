@@ -777,18 +777,18 @@ export const register: Register = (on, options: PluginOptions) => {
     const inner = Math.max(20, e.props.bodyColumns - 2)
     const thumbs = state.thumbs ?? []
     const count = Math.max(1, thumbs.length)
-    // A narrow pane (the usual docked one) puts the thumbnails in a strip under
-    // the page, so the page gets the full width; a wide one keeps them beside it.
-    const isStrip = isPaged && inner < 100
+    // Landscape pages (slides) leave room underneath, so their thumbnails go in
+    // a strip below; portrait pages (documents) leave room beside, so a column.
+    const isStrip = isPaged && p.width > p.height
     const thumbColumns = isStrip
       ? Math.min(24, Math.floor((inner - 2 * (count - 1)) / count))
-      : Math.min(22, Math.max(10, Math.floor(inner / 6)))
+      : Math.min(22, Math.max(6, Math.floor(inner / 6)))
     const thumbRows = isStrip
       ? Math.max(2, Math.min(7, Math.floor(bodyRows / 5)))
       : Math.max(2, Math.floor((bodyRows - (count - 1)) / count))
-    const sideWidth = isPaged && !isStrip ? 3 + 1 + 1 + thumbColumns : 0
+    const sideWidth = isPaged && !isStrip ? 2 + 1 + 1 + thumbColumns : 0
     const pageRows = isStrip ? bodyRows - thumbRows - 3 : bodyRows
-    const box = boxFor(p, inner - sideWidth - (sideWidth > 0 ? 3 : 0), pageRows, 255)
+    const box = boxFor(p, inner - sideWidth - (sideWidth > 0 ? 2 : 0), pageRows, 255)
     const thumbPictures = new Map(
       await Promise.all(
         thumbs.map(async t => {
@@ -847,7 +847,7 @@ export const register: Register = (on, options: PluginOptions) => {
             </Box>
           </Box>
         ) : (
-          <Box flexDirection="row" gap={3} height={bodyRows}>
+          <Box flexDirection="row" gap={2} height={bodyRows}>
             {isPaged && (
               <Box flexDirection="column" width={sideWidth} justifyContent="center">
                 {thumbs.map((t, i) => {
@@ -857,7 +857,7 @@ export const register: Register = (on, options: PluginOptions) => {
 
                   return (
                     <Box key={`side:${t.page}`} flexDirection="row" marginBottom={i < thumbs.length - 1 ? 1 : 0}>
-                      <Box width={3} justifyContent="flex-end" marginRight={1}>
+                      <Box width={2} justifyContent="flex-end" marginRight={1}>
                         {pageButton(t.page, isCurrent)}
                       </Box>
                       <Text color="claude">{Array.from({ length: rows }, () => (isCurrent ? '▌' : ' ')).join('\n')}</Text>

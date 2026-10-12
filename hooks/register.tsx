@@ -770,61 +770,114 @@ export const register: Register = (on, options: PluginOptions) => {
       return blockedNotice($, $.ui.resolve(e), p, probe.blocked, true)
     }
     const isPaged = p.pages > 1
-    const inner = Math.max(20, e.props.bodyColumns - 4)
-    const bodyRows = Math.max(12, (e.viewport?.rows ?? 30) - 10)
-    const sideWidth = isPaged ? Math.min(24, Math.max(12, Math.floor(inner / 6))) : 0
-    const mainColumns = inner - sideWidth - (isPaged ? 2 : 0)
-    const box = boxFor(p, mainColumns, bodyRows, 255)
-    const thumbRows = Math.max(2, Math.floor(bodyRows / SIDEBAR) - 1)
+    // The pane's own frame is the only border; inside it a header row, the
+    // page with its thumbnails, an optional note row and one footer row.
+    const room = (e.props.scroll?.bodyRows ?? 0) > 0 ? e.props.scroll.bodyRows : Math.max(12, (e.viewport?.rows ?? 30) - 10)
+    const bodyRows = Math.max(6, room - 4 - (p.note ? 1 : 0))
+    const inner = Math.max(20, e.props.bodyColumns - 2)
     const thumbs = state.thumbs ?? []
+    const count = Math.max(1, thumbs.length)
+    // A narrow pane (the usual docked one) puts the thumbnails in a strip under
+    // the page, so the page gets the full width; a wide one keeps them beside it.
+    const isStrip = isPaged && inner < 100
+    const thumbColumns = isStrip
+      ? Math.min(24, Math.floor((inner - 2 * (count - 1)) / count))
+      : Math.min(22, Math.max(10, Math.floor(inner / 6)))
+    const thumbRows = isStrip
+      ? Math.max(2, Math.min(7, Math.floor(bodyRows / 5)))
+      : Math.max(2, Math.floor((bodyRows - (count - 1)) / count))
+    const sideWidth = isPaged && !isStrip ? 3 + 1 + 1 + thumbColumns : 0
+    const pageRows = isStrip ? bodyRows - thumbRows - 3 : bodyRows
+    const box = boxFor(p, inner - sideWidth - (sideWidth > 0 ? 3 : 0), pageRows, 255)
     const thumbPictures = new Map(
       await Promise.all(
         thumbs.map(async t => {
-          const size = boxFor(t, sideWidth - 2, thumbRows, sideWidth - 2)
+          const size = boxFor(t, thumbColumns, thumbRows, thumbColumns)
 
-          return [t.page, await picture($, e, { key: `img:${t.page}`, png: t.png, ...size, alt: `page ${t.page}` })] as const
+          return [
+            t.page,
+            { size, node: await picture($, e, { key: `img:${t.page}`, png: t.png, ...size, alt: `page ${t.page}` }) },
+          ] as const
         }),
       ),
     )
     const go = (page: number) => turnViewer($, p, page)
+    const pageButton = (page: number, isCurrent: boolean) => (
+      <Button key={`thumb:${page}`} label={`${page}`} plain dimColor={!isCurrent} onPress={() => go(page)} />
+    )
+    const page = (
+      <Box flexDirection="column" flexGrow={isStrip ? 0 : 1} alignItems="center" justifyContent="center" height={isStrip ? box.rows : pageRows}>
+        {await picture($, e, { key: 'page', png: p.png, ...box, alt: `[${nameOf(p.source)}${pageLabel(p)}]` })}
+      </Box>
+    )
+    // Footer: the buttons always, then as much of the key hint as fits.
+    const buttonsWidth = (isPaged ? 18 : 0) + 14
+    const hint = [isPaged ? '↑↓ pages · esc close' : '', 'esc close'].find(
+      h => h !== '' && buttonsWidth + 2 + h.length <= inner,
+    )
     ensureAnimation($, PANE, 'page', p.frames, Number.POSITIVE_INFINITY, started)
 
     return (
-      <Box flexDirection="column" borderStyle="round" borderColor="claude" paddingX={1}>
-        <Box flexDirection="row" justifyContent="space-between" gap={1}>
+      <Box flexDirection="column" paddingX={1}>
+        <Box flexDirection="row" justifyContent="space-between" gap={2} marginBottom={1}>
           <Text wrap="truncate-middle">
             <Text color="claude" bold>{formatOf(p.source)}</Text> {nameOf(p.source)}
           </Text>
-          <Text dimColor>{isPaged ? `${p.page} / ${p.pages}` : `${p.width}×${p.height}`}</Text>
+          <Text dimColor>{isPaged ? `page ${p.page} of ${p.pages}` : `${p.width}×${p.height}`}</Text>
         </Box>
-        <Box flexDirection="row" gap={2}>
-          {isPaged && (
-            <Box flexDirection="column" width={sideWidth}>
+        {isStrip ? (
+          <Box flexDirection="column" height={bodyRows} justifyContent="center">
+            {page}
+            <Box flexDirection="row" justifyContent="center" gap={2} marginTop={1}>
               {thumbs.map(t => {
                 const isCurrent = t.page === p.page
+                const thumb = thumbPictures.get(t.page)
+                const columns = thumb?.size.columns ?? thumbColumns
 
                 return (
-                  <Box key={`side:${t.page}`} flexDirection="row">
-                    <Text color="claude">{isCurrent ? '▌' : ' '}</Text>
-                    <Box flexDirection="column">
-                      {thumbPictures.get(t.page)}
-                      <Button key={`thumb:${t.page}`} label={`${t.page}`} plain dimColor={!isCurrent} onPress={() => go(t.page)} />
+                  <Box key={`side:${t.page}`} flexDirection="column" alignItems="center" width={thumbColumns}>
+                    {thumb?.node}
+                    <Text color="claude">{(isCurrent ? '━' : ' ').repeat(columns)}</Text>
+                    <Box width={columns} justifyContent="center">
+                      {pageButton(t.page, isCurrent)}
                     </Box>
                   </Box>
                 )
               })}
             </Box>
-          )}
-          <Box flexDirection="column" flexGrow={1} alignItems="center">
-            {await picture($, e, { key: 'page', png: p.png, ...box, alt: `[${nameOf(p.source)}${pageLabel(p)}]` })}
           </Box>
-        </Box>
-        {p.note && <Text dimColor italic>ⓘ {p.note}</Text>}
-        <Box flexDirection="row" gap={2}>
-          {isPaged && <Button key="prev" label="prev" hotkey="p" plain dimColor onPress={() => go(p.page - 1)} />}
-          {isPaged && <Button key="next" label="next" hotkey="n" plain dimColor onPress={() => go(p.page + 1)} />}
-          <Button key="open" label="open in app" hotkey="o" plain dimColor onPress={() => openExternally($, p.source)} />
-          <Text dimColor>{isPaged ? '↑/↓ pages · ' : ''}esc close</Text>
+        ) : (
+          <Box flexDirection="row" gap={3} height={bodyRows}>
+            {isPaged && (
+              <Box flexDirection="column" width={sideWidth} justifyContent="center">
+                {thumbs.map((t, i) => {
+                  const isCurrent = t.page === p.page
+                  const thumb = thumbPictures.get(t.page)
+                  const rows = thumb?.size.rows ?? thumbRows
+
+                  return (
+                    <Box key={`side:${t.page}`} flexDirection="row" marginBottom={i < thumbs.length - 1 ? 1 : 0}>
+                      <Box width={3} justifyContent="flex-end" marginRight={1}>
+                        {pageButton(t.page, isCurrent)}
+                      </Box>
+                      <Text color="claude">{Array.from({ length: rows }, () => (isCurrent ? '▌' : ' ')).join('\n')}</Text>
+                      {thumb?.node}
+                    </Box>
+                  )
+                })}
+              </Box>
+            )}
+            {page}
+          </Box>
+        )}
+        {p.note && <Text dimColor italic wrap="truncate-end">ⓘ {p.note}</Text>}
+        <Box flexDirection="row" justifyContent="space-between" gap={2} marginTop={1}>
+          <Box flexDirection="row" gap={2}>
+            {isPaged && <Button key="prev" label="prev" hotkey="p" plain dimColor onPress={() => go(p.page - 1)} />}
+            {isPaged && <Button key="next" label="next" hotkey="n" plain dimColor onPress={() => go(p.page + 1)} />}
+            <Button key="open" label="open in app" hotkey="o" plain dimColor onPress={() => openExternally($, p.source)} />
+          </Box>
+          {hint && <Text dimColor>{hint}</Text>}
         </Box>
       </Box>
     )

@@ -73,16 +73,6 @@ Ask in plain words, like "show me slide 12 of the lecture" or "open my report in
 
 In the viewer, `↑`/`↓` or `p`/`n` turn pages, `o` opens the file in its own app and `Esc` closes it. The keys work while the viewer has the keyboard; `ctrl+x tab` gives it back after you've typed in the prompt.
 
-## Developing
-
-```
-git clone https://github.com/matteo-psnt/asset-viewer
-claude plugin marketplace add ./asset-viewer
-claude plugin install asset-viewer@asset-viewer
-```
-
-Edits load after `/reload-plugins`. Check a change with `claude plugin validate .`, `claude plugin test .` and `sh tests/converter.sh`. To re-record the demo, install kitty and run `sh demo/record.sh demo/scenarios/chart.txt`.
-
 The plugin API this uses is in early access, so a Claude Code update can break it.
 
 ## License

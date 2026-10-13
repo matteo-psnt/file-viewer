@@ -1,4 +1,4 @@
 mode acceptEdits
-say Write a small SVG bar chart of my running this week, Monday to Sunday: 5, 0, 8, 6, 0, 12 and 4 km, to running.svg and show it to me.
+say Write a small SVG bar chart of my running this week, Monday to Sunday: 5, 0, 8, 6, 0, 12 and 4 km, to running.svg and show it to me. Keep your reply to one line.
 done
 pause 3

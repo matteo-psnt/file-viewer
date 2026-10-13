@@ -11,8 +11,9 @@ failures=0
 
 # expect <file> <page> <field number> <expected value> <what>
 expect() {
-  line=$(sh "$render" "$fixtures/$1" "$2" "$cache" 2>&1) || {
-    printf 'FAIL %s: exited: %s\n' "$1" "$line"
+  # Only stdout is the answer; macOS tools can warn on stderr (sips on a VM).
+  line=$(sh "$render" "$fixtures/$1" "$2" "$cache" 2>"$cache/stderr") || {
+    printf 'FAIL %s: exited: %s\n' "$1" "$(cat "$cache/stderr")"
     failures=$((failures + 1))
     return
   }

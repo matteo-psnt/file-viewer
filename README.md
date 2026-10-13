@@ -1,4 +1,4 @@
-# asset-viewer
+# file-viewer
 
 A Claude Code plugin that shows PDFs, slides, spreadsheets and images inline, right in the conversation.
 
@@ -11,7 +11,7 @@ Claude Code can read a PDF or a screenshot, but you never see it. With this plug
 In Claude Code:
 
 ```
-/plugin install asset-viewer --marketplace matteo-psnt/asset-viewer
+/plugin install file-viewer --marketplace matteo-psnt/file-viewer
 ```
 
 Then install the converters. On macOS:

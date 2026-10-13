@@ -19,14 +19,14 @@ repo=$(dirname "$here")
 scenario=$1
 name=${2:-$(basename "$scenario" .txt)}
 kitty=$(command -v kitty || echo /Applications/kitty.app/Contents/MacOS/kitty)
-sock=unix:/tmp/asset-viewer-demo-$$
+sock=unix:/tmp/file-viewer-demo-$$
 out=$here/out
 frames=$out/$name-frames
 mkdir -p "$out"
 rm -rf "$frames"
 mkdir -p "$frames"
 
-tools=mcp__asset-viewer__preview
+tools=mcp__file-viewer__preview
 extra=$(sed -n 's/^tools //p' "$scenario" | head -1)
 [ -n "$extra" ] && tools="$tools,$extra"
 mode=$(sed -n 's/^mode //p' "$scenario" | head -1)
@@ -44,7 +44,7 @@ env -u CLAUDECODE -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_ENTRYPOINT -u CLAU
   -o hide_window_decorations=titlebar-only -o remember_window_size=no \
   -o initial_window_width=118c -o initial_window_height=40c -o font_size=15 \
   -o window_padding_width=10 -o confirm_os_window_close=0 \
-  --title asset-viewer-demo --directory "$repo" \
+  --title file-viewer-demo --directory "$repo" \
   claude --permission-mode "${mode:-default}" --allowedTools "$tools" >/dev/null 2>&1 &
 kpid=$!
 trap 'kill $kpid ${cpid:-} 2>/dev/null || true' EXIT

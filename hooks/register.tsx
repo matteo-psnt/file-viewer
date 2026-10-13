@@ -6,8 +6,8 @@ import type { Frame, Preview, Size, Thumb, Viewer } from '../types'
 type ImagePreview = Extract<Preview, { kind: 'image' }>
 
 const TOOL = 'preview'
-const FULL_TOOL = 'mcp__asset-viewer__preview'
-const PANE = 'asset-viewer'
+const FULL_TOOL = 'mcp__file-viewer__preview'
+const PANE = 'file-viewer'
 const STORE_INDEX = 'previews:index'
 const STORE_KEEP = 500
 const KEEP = 100
@@ -26,8 +26,8 @@ const FORMAT: Record<string, string> = {
   gif: 'GIF', webp: 'WebP', heic: 'HEIC', heif: 'HEIF',
 }
 
-const previews = atom({ plugin: 'asset-viewer', key: 'previews' } as const, {})
-const viewer = atom({ plugin: 'asset-viewer', key: 'viewer' } as const, null)
+const previews = atom({ plugin: 'file-viewer', key: 'previews' } as const, {})
+const viewer = atom({ plugin: 'file-viewer', key: 'viewer' } as const, null)
 
 function nameOf(path: string) {
   return path.split('/').pop() ?? path
@@ -94,7 +94,7 @@ async function preview($: EngineInterface, source: string, page: number): Promis
       reason: `.${extOf(source)} is a text file, which Claude Code already shows`,
     }
   }
-  $.ui.status(`asset-viewer: preparing ${nameOf(source)}…`)
+  $.ui.status(`file-viewer: preparing ${nameOf(source)}…`)
   try {
     return await renderImage($, source, page)
   } catch (err) {
@@ -543,7 +543,7 @@ export const register: Register = (on, options: PluginOptions) => {
     })
     await $.command.register({
       name: 'view',
-      description: 'Open a file in the asset viewer: /view <path> [page]',
+      description: 'Open a file in the file viewer: /view <path> [page]',
       argumentHint: '<path> [page]',
     })
 
@@ -656,7 +656,7 @@ export const register: Register = (on, options: PluginOptions) => {
       return (
         <Box flexDirection="column">
           <Text dimColor>
-            asset-viewer test · probe: {probe.verdict ?? probe.phase}
+            file-viewer test · probe: {probe.verdict ?? probe.phase}
             {probe.blocked ? ` (${probe.blocked.why})` : ''} · transport: {await transportOf($)}
           </Text>
           <Box flexDirection="row" gap={2}>

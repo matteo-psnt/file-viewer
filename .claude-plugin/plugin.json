@@ -1,5 +1,5 @@
 {
-  "name": "asset-viewer",
+  "name": "file-viewer",
   "version": "0.1.0",
   "description": "Inline previews of PDFs, Office files, images and animated GIFs in Claude Code, with a paging viewer and a preview tool Claude can call",
   "author": {
@@ -15,8 +15,8 @@
     "ghostty"
   ],
   "types": "./types/index.d.ts",
-  "homepage": "https://github.com/matteo-psnt/asset-viewer",
-  "repository": "https://github.com/matteo-psnt/asset-viewer",
+  "homepage": "https://github.com/matteo-psnt/file-viewer",
+  "repository": "https://github.com/matteo-psnt/file-viewer",
   "userConfig": {
     "transport": {
       "type": "string",

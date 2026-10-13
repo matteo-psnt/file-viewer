@@ -28,7 +28,7 @@ export type Viewer = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'asset-viewer': {
+    'file-viewer': {
       previews: Record<string, Preview>
       viewer: Viewer | null
     }

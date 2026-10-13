@@ -13,9 +13,9 @@ os=$(uname -s)
 
 if [ -z "$cache" ]; then
   if [ "$os" = Darwin ]; then
-    cache="$HOME/Library/Caches/asset-viewer"
+    cache="$HOME/Library/Caches/claude-file-viewer"
   else
-    cache="${XDG_CACHE_HOME:-$HOME/.cache}/asset-viewer"
+    cache="${XDG_CACHE_HOME:-$HOME/.cache}/claude-file-viewer"
   fi
 fi
 # A literal "~/" from the caller, expanded here.

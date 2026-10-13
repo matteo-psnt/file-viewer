@@ -12,7 +12,7 @@ const page = (n: number, note = '-') =>
 
 const result = (id: string, output: unknown) => ({
   tool_use_id: id,
-  tool: 'mcp__asset-viewer__preview',
+  tool: 'mcp__file-viewer__preview',
   output,
   isErrored: false,
 })
@@ -23,7 +23,7 @@ test('a deck shows inline without its note and pages with the buttons', async ($
   on('process.run', (_$, e) => page(Number(e.argv[3]), 'approximate layout (Quick Look)'))
 
   const ran = await $.tool.call({
-    tool: 'mcp__asset-viewer__preview',
+    tool: 'mcp__file-viewer__preview',
     tool_use_id: 'call-1',
     path: '/notes/deck.pptx',
     page: 3,
@@ -33,7 +33,7 @@ test('a deck shows inline without its note and pages with the buttons', async ($
   )
 
   const ui = await $.ui.mount({
-    plugin: 'asset-viewer',
+    plugin: 'file-viewer',
     surface: 'terminal',
     component: 'ToolResult',
     requestId: 'call-1',
@@ -52,10 +52,10 @@ test('unsupported and text files are reported inline and to the model', async ($
   on('fs.exists', () => ({ value: true }))
   on('process.run', () => failed('.zip is not a supported type'))
 
-  const zip = await $.tool.call({ tool: 'mcp__asset-viewer__preview', tool_use_id: 'z', path: '/a/sub.zip' })
+  const zip = await $.tool.call({ tool: 'mcp__file-viewer__preview', tool_use_id: 'z', path: '/a/sub.zip' })
   expect(zip.result).toMatch(/^Can't preview sub\.zip: \.zip is not a supported type\. Supported:/)
   const ui = await $.ui.mount({
-    plugin: 'asset-viewer',
+    plugin: 'file-viewer',
     surface: 'terminal',
     component: 'ToolResult',
     requestId: 'z',
@@ -63,7 +63,7 @@ test('unsupported and text files are reported inline and to the model', async ($
   })
   expect(await ui.find({ type: 'Text', text: /Can't preview sub\.zip/ })).toBeDefined()
 
-  const py = await $.tool.call({ tool: 'mcp__asset-viewer__preview', path: '/a/main.py' })
+  const py = await $.tool.call({ tool: 'mcp__file-viewer__preview', path: '/a/main.py' })
   expect(py.result).toMatch(/\.py is a text file, which Claude Code already shows/)
 })
 
@@ -84,9 +84,9 @@ test('an animated gif plays by swapping frames', async ($, on) => {
     return { value: {} }
   })
 
-  await $.tool.call({ tool: 'mcp__asset-viewer__preview', tool_use_id: 'g', path: '/a/spin.gif' })
+  await $.tool.call({ tool: 'mcp__file-viewer__preview', tool_use_id: 'g', path: '/a/spin.gif' })
   await $.ui.mount({
-    plugin: 'asset-viewer',
+    plugin: 'file-viewer',
     surface: 'terminal',
     component: 'ToolResult',
     requestId: 'g',
@@ -104,13 +104,13 @@ test('the viewer shows a sidebar of pages and turns with the arrow keys', async 
   on('process.run', (_$, e) => page(Number(e.argv[3])))
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('ui.focus', () => ({}))
-  await $.tool.call({ tool: 'mcp__asset-viewer__preview', path: '/notes/deck.pptx', page: 6, mode: 'viewer' })
+  await $.tool.call({ tool: 'mcp__file-viewer__preview', path: '/notes/deck.pptx', page: 6, mode: 'viewer' })
 
   const ui = await $.ui.mount({
-    plugin: 'asset-viewer',
+    plugin: 'file-viewer',
     surface: 'terminal',
     component: 'Pane',
-    requestId: 'asset-viewer',
+    requestId: 'file-viewer',
     viewport: { columns: 140, rows: 50 },
     props: { title: 'Viewer', isFocused: true, bodyColumns: 130, placement: 'inline' } as never,
   })
@@ -120,7 +120,7 @@ test('the viewer shows a sidebar of pages and turns with the arrow keys', async 
   }
 
   // An arrow key moving the ring onto page 7's button turns to page 7.
-  await $.ui.focus({ component: 'Pane', requestId: 'asset-viewer', element: 'thumb:7', origin: { kind: 'person' } })
+  await $.ui.focus({ component: 'Pane', requestId: 'file-viewer', element: 'thumb:7', origin: { kind: 'person' } })
   expect((await ui.find({ key: 'page' }))?.props).toMatchObject({ source: { file: '/c/p7.png' } })
   expect(await ui.find({ key: 'thumb:9' })).toBeDefined()
 
@@ -139,7 +139,7 @@ test('a resumed conversation draws a preview from the store', async ($, on) => {
   on('fs.exists', () => ({ value: true }))
 
   const ui = await $.ui.mount({
-    plugin: 'asset-viewer',
+    plugin: 'file-viewer',
     surface: 'terminal',
     component: 'ToolResult',
     requestId: 'old-call',
@@ -164,7 +164,7 @@ test('a preview whose cached PNG is gone is rendered again', async ($, on) => {
   })
 
   const ui = await $.ui.mount({
-    plugin: 'asset-viewer',
+    plugin: 'file-viewer',
     surface: 'terminal',
     component: 'ToolResult',
     requestId: 'purged',
@@ -178,7 +178,7 @@ test('a preview whose cached PNG is gone is rendered again', async ($, on) => {
 const ONE_PIXEL = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
 
 const pngTool = (id: string) =>
-  ({ tool: 'mcp__asset-viewer__preview', tool_use_id: id, path: '/a/pic.png' }) as const
+  ({ tool: 'mcp__file-viewer__preview', tool_use_id: id, path: '/a/pic.png' }) as const
 
 test('over ssh the picture is sent as bytes', async ($, on) => {
   mock.store(on)
@@ -189,7 +189,7 @@ test('over ssh the picture is sent as bytes', async ($, on) => {
 
   await $.tool.call(pngTool('s1'))
   const ui = await $.ui.mount({
-    plugin: 'asset-viewer', surface: 'terminal', component: 'ToolResult', requestId: 's1', props: result('s1', ''),
+    plugin: 'file-viewer', surface: 'terminal', component: 'ToolResult', requestId: 's1', props: result('s1', ''),
   })
   expect((await ui.find({ key: 'pic' }))?.props).toMatchObject({ source: { png: ONE_PIXEL } })
 })
@@ -203,7 +203,7 @@ test('the transport setting overrides the guess', { options: { transport: 'bytes
 
   await $.tool.call(pngTool('s2'))
   const ui = await $.ui.mount({
-    plugin: 'asset-viewer', surface: 'terminal', component: 'ToolResult', requestId: 's2', props: result('s2', ''),
+    plugin: 'file-viewer', surface: 'terminal', component: 'ToolResult', requestId: 's2', props: result('s2', ''),
   })
   expect((await ui.find({ key: 'pic' }))?.props).toMatchObject({ source: { png: ONE_PIXEL } })
 })
@@ -216,7 +216,7 @@ test('a local terminal reads the file by path', async ($, on) => {
 
   await $.tool.call(pngTool('s3'))
   const ui = await $.ui.mount({
-    plugin: 'asset-viewer', surface: 'terminal', component: 'ToolResult', requestId: 's3', props: result('s3', ''),
+    plugin: 'file-viewer', surface: 'terminal', component: 'ToolResult', requestId: 's3', props: result('s3', ''),
   })
   expect((await ui.find({ key: 'pic' }))?.props).toMatchObject({ source: { file: '/c/pic.png', format: 'png' } })
 })
@@ -227,10 +227,10 @@ async function startRefused(...[$, on, deny]: [...Parameters<TestBody>, string])
   on('ui.blit', () => ({ value: { deny } }))
   on('fs.write', () => ({ value: undefined }))
   on('session.start', () => ({ cwd: '/a' }))
-  on('tool.register', () => ({ value: { tool: 'mcp__asset-viewer__preview' } }))
+  on('tool.register', () => ({ value: { tool: 'mcp__file-viewer__preview' } }))
   on('command.register', () => ({ value: { command: 'view' } }))
   await $.session.start({ cwd: '/a', surface: 'terminal', isInteractive: true } as never)
-  await $.ui.mount({ plugin: 'asset-viewer', surface: 'terminal', component: 'AbovePrompt', requestId: 'band', props: {} as never })
+  await $.ui.mount({ plugin: 'file-viewer', surface: 'terminal', component: 'AbovePrompt', requestId: 'band', props: {} as never })
   await clock.advance(500)
 }
 
@@ -243,7 +243,7 @@ test('in Claude Agents the card says why pictures cannot show and offers the app
   const ran = await $.tool.call(pngTool('b1'))
   expect(ran.result).toMatch(/^Not shown: This session runs in Claude Agents/)
   const ui = await $.ui.mount({
-    plugin: 'asset-viewer', surface: 'terminal', component: 'ToolResult', requestId: 'b1', props: result('b1', ran.result),
+    plugin: 'file-viewer', surface: 'terminal', component: 'ToolResult', requestId: 'b1', props: result('b1', ran.result),
   })
   expect(await ui.find({ key: 'pic' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /CLAUDE_CODE_FORCE_TERMINAL_IMAGES/ })).toBeDefined()
@@ -263,7 +263,7 @@ test('iTerm2 is told how to turn pictures on', async ($, on) => {
   const ran = await $.tool.call(pngTool('b2'))
   expect(ran.result).toContain('only turns pictures on in Ghostty and kitty, and this is iTerm2 3.7.4.')
   const ui = await $.ui.mount({
-    plugin: 'asset-viewer', surface: 'terminal', component: 'ToolResult', requestId: 'b2', props: result('b2', ran.result),
+    plugin: 'file-viewer', surface: 'terminal', component: 'ToolResult', requestId: 'b2', props: result('b2', ran.result),
   })
   expect(await ui.find({ type: 'Text', text: /"CLAUDE_CODE_FORCE_TERMINAL_IMAGES": "1" to env in ~\/\.claude\/settings\.json/ })).toBeDefined()
 })

@@ -1,12 +1,12 @@
 {
-  "name": "asset-viewer",
+  "name": "file-viewer",
   "description": "Inline file previews for Claude Code",
   "owner": {
     "name": "Matteo Pesenti"
   },
   "plugins": [
     {
-      "name": "asset-viewer",
+      "name": "file-viewer",
       "source": "./",
       "description": "Inline previews of PDFs, Office files, images and animated GIFs, with a paging viewer"
     }

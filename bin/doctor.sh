@@ -1,5 +1,5 @@
 #!/bin/sh
-# doctor.sh: checks what asset-viewer can preview on this machine and whether
+# doctor.sh: checks what file-viewer can preview on this machine and whether
 # this terminal can draw the pictures. Run it in the terminal you use Claude Code in.
 os=$(uname -s)
 
@@ -146,6 +146,6 @@ else:
         print(f"  {green} Kitty graphics with placeholders and local files. Everything works.")
     else:
         print(f"  {yellow} Kitty graphics, but this terminal won't read local files.")
-        print("    asset-viewer sends bytes when it detects ssh, Warp or WSL; elsewhere set its")
+        print("    file-viewer sends bytes when it detects ssh, Warp or WSL; elsewhere set its")
         print('    "Image transport" option to "bytes" in /config.')
 EOF

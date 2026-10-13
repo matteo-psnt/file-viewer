@@ -524,6 +524,14 @@ function blockedNotice(
   )
 }
 
+function footerHints(isFocused: boolean, isPaged: boolean) {
+  if (!isFocused) {
+    return ['ctrl+x tab to use keys', 'ctrl+x tab']
+  }
+
+  return [isPaged ? '↑↓ pages · esc close' : '', 'esc close']
+}
+
 function unsupportedText(value: Extract<Preview, { kind: 'unsupported' }>) {
   return `Can't preview ${nameOf(value.source)}: ${value.reason}. Supported: ${SUPPORTED}.`
 }
@@ -830,10 +838,14 @@ export const register: Register = (on, options: PluginOptions) => {
     // Footer: the buttons always, then as much of the key hint as fits. The
     // keys only reach the pane while it holds the keyboard, so say how to get it.
     const buttonsWidth = (isPaged ? 18 : 0) + 14
-    const hints = e.props.isFocused
-      ? [isPaged ? '↑↓ pages · esc close' : '', 'esc close']
-      : ['ctrl+x tab to use keys', 'ctrl+x tab']
-    const hint = hints.find(h => h !== '' && buttonsWidth + 2 + h.length <= inner)
+    const hints = footerHints(e.props.isFocused, isPaged)
+    let hint = ''
+    for (const candidate of hints) {
+      if (candidate !== '' && buttonsWidth + 2 + candidate.length <= inner) {
+        hint = candidate
+        break
+      }
+    }
     ensureAnimation($, PANE, 'page', p.frames, Number.POSITIVE_INFINITY, started)
 
     return (

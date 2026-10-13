@@ -525,7 +525,7 @@ export const register: Register = (on, options: PluginOptions) => {
         properties: {
           path: { type: 'string', description: 'Absolute or working-directory-relative path' },
           page: { type: 'integer', minimum: 1, description: 'Page or slide, 1-based; default 1' },
-          caption: { type: 'string', description: 'One short line shown above the preview' },
+          caption: { type: 'string', description: 'One short line shown above the preview, in plain words (e.g. "Sightings by species")' },
           size: { type: 'string', enum: ['small', 'medium', 'large'], description: 'Default medium' },
           mode: {
             type: 'string',

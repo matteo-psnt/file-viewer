@@ -1,0 +1,7 @@
+say Show me slide 3 of demo/deck.pdf and tell me which species was rarest.
+done
+view demo/deck.pdf
+key down
+key down
+key down
+pause 2

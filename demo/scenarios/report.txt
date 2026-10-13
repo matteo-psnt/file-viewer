@@ -1,0 +1,5 @@
+say Open demo/report.pdf in the viewer and tell me in one line what page 2 covers.
+done
+key down
+key down
+pause 2

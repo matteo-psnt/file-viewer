@@ -105,6 +105,8 @@ sh tests/converter.sh
 
 The first two check the hooks module against Claude Code. The last runs the converter over `tests/fixtures`, and CI runs it on macOS and Ubuntu.
 
+To re-record the demo, install [kitty](https://sw.kovidgoyal.net/kitty/) and run `sh demo/record.sh demo/scenarios/slides.txt`. It plays the scenario in a kitty window through kitty's remote control and writes a GIF and an MP4 to `demo/out`; the window doesn't need to be in front.
+
 The plugin API this uses is in early access, so a Claude Code update can break it.
 
 ## License

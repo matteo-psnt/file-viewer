@@ -257,10 +257,9 @@ async function runProbe($: EngineInterface, attempt = 0) {
     return
   }
   const site = { requestId: probe.bandId, key: 'probe' }
+  const probeFile = `${$.plugin.root}/bin/probe.png`
   const blitFile = () =>
-    $.ui
-      .blit({ ...site, source: { file: `${$.plugin.root}/bin/probe.png`, format: 'png' } })
-      .catch((err: Error) => ({ deny: err.message }))
+    $.ui.blit({ ...site, source: { file: probeFile, format: 'png' } }).catch((err: Error) => ({ deny: err.message }))
   // The first file swap can come back as "not yet said ... blit again" while
   // the terminal answers whether it reads local files; that's a wait, not a no.
   let byFile = await blitFile()
@@ -271,9 +270,7 @@ async function runProbe($: EngineInterface, attempt = 0) {
   if (byFile.deny === undefined) {
     probe.verdict = 'file'
   } else {
-    const byBytes = await $.ui
-      .blit({ ...site, source: { png: PROBE_BYTES } })
-      .catch((err: Error) => ({ deny: err.message }))
+    const byBytes = await $.ui.blit({ ...site, source: { png: PROBE_BYTES } }).catch((err: Error) => ({ deny: err.message }))
     probe.verdict = byBytes.deny === undefined ? 'bytes' : 'none'
     if (probe.verdict === 'none') {
       const termProgram = await $.env.get('TERM_PROGRAM').catch(() => undefined)
@@ -875,7 +872,7 @@ export const register: Register = (on, options: PluginOptions) => {
     )
   })
 
-  on('session.end', (_$, e, next) => {
+  on('session.end', ($, e, next) => {
     for (const id of [...animations.keys()]) {
       stopAnimation(id)
     }

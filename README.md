@@ -75,7 +75,20 @@ In the viewer, `↑`/`↓` or `p`/`n` turn pages, `o` opens the file in its own 
 
 ## What it runs
 
-Everything happens on your machine. The plugin runs the converters above on the files you or Claude ask to preview, keeps the rendered pages in `~/Library/Caches/claude-file-viewer` (`~/.cache/claude-file-viewer` on Linux) and deletes them after 30 days unused, and opens a file in its own app only when you press open. It never uploads your files or sends them anywhere.
+Everything happens on your machine, and the plugin never uploads your files or sends them anywhere.
+
+To turn a file into a picture it runs `bin/render.sh`, which calls the converters above (poppler, LibreOffice, `sips` or ImageMagick, `rsvg-convert`, and on macOS without LibreOffice, Quick Look and a headless Chrome printing the Quick Look page to PDF). It keeps the rendered pages in `~/Library/Caches/claude-file-viewer` (`~/.cache/claude-file-viewer` on Linux) and deletes them after 30 days unused. The open button runs `bin/open.sh`, which hands the file to `open`, `xdg-open` or `wslview`.
+
+Its hooks:
+
+- `session.start` registers the `preview` tool and `/view`, and draws a one-pixel picture once to learn whether this terminal can show pictures.
+- `tool.call` answers the plugin's own `preview` tool; it doesn't stand in for any other tool.
+- `command.run` answers `/view`.
+- `ui.render` draws the preview card, the viewer pane and that one-pixel check.
+- `ui.focus` turns the viewer's page when the arrow keys move between page numbers.
+- `session.end` stops any animation still playing.
+
+It reads `SSH_CONNECTION`, `SSH_TTY`, `WSL_DISTRO_NAME` and `TERM_PROGRAM` only to tell whether the terminal can read this machine's files, and sends none of them anywhere.
 
 The plugin API this uses is in early access, so a Claude Code update can break it.
 

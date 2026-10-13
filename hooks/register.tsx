@@ -676,7 +676,9 @@ export const register: Register = (on, options: PluginOptions) => {
       if (value.kind !== 'image' || !(await $.fs.exists(value.png))) {
         return next(e)
       }
-      const { Box, Text, Svg } = $.ui.resolve(e)
+      const { Box, Text, Svg, Button } = $.ui.resolve(e)
+      const id = e.requestId
+      const isPaged = value.pages > 1
 
       return (
         <Box flexDirection="column" gap={1}>
@@ -690,6 +692,11 @@ export const register: Register = (on, options: PluginOptions) => {
             alt={`${nameOf(value.source)}${pageLabel(value)}`}
             width={Math.min(640, value.width)}
           />
+          <Box flexDirection="row" gap={2}>
+            {isPaged && <Button key="prev" label="◀ prev" onPress={() => turnInline($, id, value, value.page - 1)} />}
+            {isPaged && <Button key="next" label="next ▶" onPress={() => turnInline($, id, value, value.page + 1)} />}
+            <Button key="open" label="open in app" onPress={() => openExternally($, value.source)} />
+          </Box>
         </Box>
       )
     }
@@ -818,7 +825,28 @@ export const register: Register = (on, options: PluginOptions) => {
 
   on('ui.render', { component: 'Pane', requestId: 'file-viewer' }, async ($, e, next) => {
     if (e.surface !== 'terminal') {
-      return next(e)
+      const remote = await getViewer($)
+      if (remote === null || !(await $.fs.exists(remote.preview.png))) {
+        return next(e)
+      }
+      const { Box, Text, Svg, Button } = $.ui.resolve(e)
+      const p = remote.preview
+      const isPaged = p.pages > 1
+
+      return (
+        <Box flexDirection="column" gap={1}>
+          <Text>
+            <Text bold>{formatOf(p.source)}</Text> {nameOf(p.source)}
+            {pageLabel(p)}
+          </Text>
+          <Svg source={await remoteSvg($, p)} alt={`${nameOf(p.source)}${pageLabel(p)}`} />
+          <Box flexDirection="row" gap={2}>
+            {isPaged && <Button key="prev" label="◀ prev" onPress={() => turnViewer($, p, p.page - 1).catch(() => undefined)} />}
+            {isPaged && <Button key="next" label="next ▶" onPress={() => turnViewer($, p, p.page + 1).catch(() => undefined)} />}
+            <Button key="open" label="open in app" onPress={() => openExternally($, p.source)} />
+          </Box>
+        </Box>
+      )
     }
     const { Box, Text, Button } = $.ui.resolve(e)
     const state: Viewer | null = await getViewer($)

@@ -96,6 +96,23 @@ size_of() {
   fi
 }
 
+# Runs a command for at most $1 seconds. Quick Look, LibreOffice and a headless
+# browser can all wait forever where there's no desktop session (CI, ssh).
+with_timeout() {
+  limit=$1
+  shift
+  "$@" &
+  child=$!
+  (sleep "$limit"; kill "$child") >/dev/null 2>&1 &
+  guard=$!
+  result=0
+  wait "$child" 2>/dev/null || result=$?
+  # Waiting on the stopped guard keeps the shell from announcing it.
+  kill "$guard" 2>/dev/null || true
+  wait "$guard" 2>/dev/null || true
+  return "$result"
+}
+
 chrome() {
   for app in "Google Chrome" "Chromium" "Microsoft Edge" "Brave Browser"; do
     bin="/Applications/$app.app/Contents/MacOS/$app"
@@ -124,18 +141,18 @@ office_to_pdf() {
   rm -rf "$work"
   mkdir -p "$work"
   if so=$(soffice_bin); then
-    "$so" --headless "-env:UserInstallation=file://$work/profile" --convert-to pdf --outdir "$work" "$src" >/dev/null 2>&1 || true
+    with_timeout 90 "$so" --headless "-env:UserInstallation=file://$work/profile" --convert-to pdf --outdir "$work" "$src" >/dev/null 2>&1 || true
     made=$(first "$work"/*.pdf || true)
     [ -n "$made" ] && { mv "$made" "$pdf"; rm -rf "$work"; return 0; }
   fi
   has qlmanage || { rm -rf "$work"; return 1; }
   browser=$(chrome) || { rm -rf "$work"; return 1; }
-  qlmanage -p -o "$work" "$src" >/dev/null 2>&1 || true
+  with_timeout 60 qlmanage -p -o "$work" "$src" >/dev/null 2>&1 || true
   ql=$(first "$work"/*.qlpreview || true)
-  [ -n "$ql" ] && [ -f "$ql/Preview.html" ] || { rm -rf "$work"; return 1; }
+  if [ -z "$ql" ] || [ ! -f "$ql/Preview.html" ]; then rm -rf "$work"; return 1; fi
   # Chromium cannot draw a PDF inside <img>: rasterize embedded ones.
   for f in "$ql"/*.pdf; do
-    [ -f "$f" ] && pdftoppm -png -r 200 -singlefile "$f" "${f%.pdf}-pdf" 2>/dev/null || true
+    if [ -f "$f" ]; then pdftoppm -png -r 200 -singlefile "$f" "${f%.pdf}-pdf" 2>/dev/null || true; fi
   done
   size=$(grep -o 'div.slide, div.loading-slide { width: [0-9]*; height: [0-9]*;}' "$ql/Preview.html" | head -1 | grep -o '[0-9][0-9]*' | tr '\n' ' ')
   if [ -n "$size" ]; then
@@ -146,7 +163,7 @@ office_to_pdf() {
     css="@page{size:letter;margin:0.6in} html,body{background:#fff!important}"
   fi
   sed -e 's|\(Attachment[0-9]*\)\.pdf|\1-pdf.png|g' -e "s|</head>|<style>$css</style></head>|" "$ql/Preview.html" > "$ql/print.html"
-  "$browser" --headless=new --disable-gpu --no-pdf-header-footer --user-data-dir="$work/profile" \
+  with_timeout 60 "$browser" --headless=new --disable-gpu --no-pdf-header-footer --user-data-dir="$work/profile" \
     --print-to-pdf="$pdf" "file://$ql/print.html" >/dev/null 2>&1 || true
   [ -f "$pdf" ] && drop_trailing_blank_pages "$pdf" "$work"
   rm -rf "$work"
@@ -222,7 +239,7 @@ iwork_preview() {
   if has qlmanage; then
     tmp="$cache/ql-$doc"
     mkdir -p "$tmp"
-    qlmanage -t -s 1400 -o "$tmp" "$src" >/dev/null 2>&1 || true
+    with_timeout 60 qlmanage -t -s 1400 -o "$tmp" "$src" >/dev/null 2>&1 || true
     thumb=$(first "$tmp"/*.png || true)
     [ -n "$thumb" ] && { mv "$thumb" "$out"; rm -rf "$tmp"; return 0; }
     rm -rf "$tmp"
@@ -252,7 +269,7 @@ case "$ext" in
       out="$cache/$doc-p1.png"
       tmp="$cache/ql-$doc"
       mkdir -p "$tmp"
-      qlmanage -t -s 1400 -o "$tmp" "$src" >/dev/null 2>&1 || true
+      with_timeout 60 qlmanage -t -s 1400 -o "$tmp" "$src" >/dev/null 2>&1 || true
       thumb=$(first "$tmp"/*.png || true)
       [ -n "$thumb" ] || { rm -rf "$tmp"; echo "no preview for .$ext" >&2; exit 3; }
       mv "$thumb" "$out"

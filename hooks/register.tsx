@@ -532,6 +532,20 @@ function footerHints(isFocused: boolean, isPaged: boolean) {
   return [isPaged ? '↑↓ pages · esc close' : '', 'esc close']
 }
 
+// The desktop app, the editor and the mobile app draw an Svg as an image but
+// have no Image element, so a page reaches them as a JPEG inside an SVG,
+// kept under the 128 KiB they take.
+async function remoteSvg($: EngineInterface, value: ImagePreview) {
+  const script = `${$.plugin.root}/bin/jpeg.sh`
+  const ran = await $.process.run(['/bin/sh', script, value.png, '800'])
+  const jpeg = (await $.fs.read(ran.stdout.trim(), { as: 'bytes' })).base64
+
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${value.width} ${value.height}">` +
+    `<image href="data:image/jpeg;base64,${jpeg}" width="${value.width}" height="${value.height}"/></svg>`
+  )
+}
+
 function unsupportedText(value: Extract<Preview, { kind: 'unsupported' }>) {
   return `Can't preview ${nameOf(value.source)}: ${value.reason}. Supported: ${SUPPORTED}.`
 }
@@ -655,8 +669,29 @@ export const register: Register = (on, options: PluginOptions) => {
       return next(e)
     }
     const value = await lookup($, e.requestId)
-    if (value === undefined || e.surface !== 'terminal') {
+    if (value === undefined) {
       return next(e)
+    }
+    if (e.surface !== 'terminal') {
+      if (value.kind !== 'image' || !(await $.fs.exists(value.png))) {
+        return next(e)
+      }
+      const { Box, Text, Svg } = $.ui.resolve(e)
+
+      return (
+        <Box flexDirection="column" gap={1}>
+          <Text>
+            <Text bold>{formatOf(value.source)}</Text> {nameOf(value.source)}
+            {pageLabel(value)}
+          </Text>
+          {value.caption && <Text dimColor italic>{value.caption}</Text>}
+          <Svg
+            source={await remoteSvg($, value)}
+            alt={`${nameOf(value.source)}${pageLabel(value)}`}
+            width={Math.min(640, value.width)}
+          />
+        </Box>
+      )
     }
     const { Box, Text, Button, Image } = $.ui.resolve(e)
     const id = e.requestId

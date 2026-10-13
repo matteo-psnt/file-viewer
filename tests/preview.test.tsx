@@ -267,3 +267,20 @@ test('iTerm2 is told how to turn pictures on', async ($, on) => {
   })
   expect(await ui.find({ type: 'Text', text: /"CLAUDE_CODE_FORCE_TERMINAL_IMAGES": "1" to env in ~\/\.claude\/settings\.json/ })).toBeDefined()
 })
+
+test('the desktop app gets the page as a JPEG inside an Svg', async ($, on) => {
+  mock.store(on)
+  on('fs.exists', () => ({ value: true }))
+  on('fs.read', () => ({ value: { base64: ONE_PIXEL } }))
+  on('process.run', (_$, e) =>
+    e.argv[1]?.endsWith('jpeg.sh') ? ok('/c/pic-w800.jpg\n') : ok('/c/pic.png\t1200\t900\t1\t1\t/a/pic.png\t-\t-\n'),
+  )
+
+  await $.tool.call(pngTool('d1'))
+  const ui = await $.ui.mount({
+    plugin: 'file-viewer', surface: 'desktop', component: 'ToolResult', requestId: 'd1', props: result('d1', ''),
+  })
+  const svg = await ui.find({ type: 'Svg' })
+  expect(svg?.props).toMatchObject({ width: 640 })
+  expect((svg?.props as { source: string }).source).toContain(`data:image/jpeg;base64,${ONE_PIXEL}`)
+})

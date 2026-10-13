@@ -18,6 +18,8 @@
   "types": "./types/index.d.ts",
   "homepage": "https://github.com/matteo-psnt/file-viewer",
   "repository": "https://github.com/matteo-psnt/file-viewer",
+  "supportUrl": "https://github.com/matteo-psnt/file-viewer/issues",
+  "privacyPolicyUrl": "https://github.com/matteo-psnt/file-viewer/blob/main/PRIVACY.md",
   "userConfig": {
     "transport": {
       "type": "string",

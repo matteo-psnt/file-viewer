@@ -1,9 +1,9 @@
 #!/bin/sh
-# Runs bin/render.sh on every fixture and checks what it prints.
-# Usage: sh tests/converter.sh   (needs the tools bin/doctor.sh lists)
+# Runs scripts/render.sh on every fixture and checks what it prints.
+# Usage: sh tests/converter.sh   (needs the tools scripts/doctor.sh lists)
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
-render="$here/../bin/render.sh"
+render="$here/../scripts/render.sh"
 fixtures="$here/fixtures"
 cache=$(mktemp -d)
 trap 'rm -rf "$cache"' EXIT

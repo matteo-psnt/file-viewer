@@ -12,5 +12,5 @@ First version.
 - Linux support for the converter (ImageMagick, LibreOffice, XDG cache)
 - Pictures sent as bytes over ssh, in Warp and under WSL, with an "Image transport" setting to override
 - Where Claude Code won't draw pictures (Claude Agents sessions, tmux, terminals other than Ghostty and kitty), a notice saying why and what would fix it, with a button to open the file in its own app; Claude gets the same reason
-- `bin/doctor.sh` checks the installed converters and whether the terminal can show pictures, including the `CLAUDE_CODE_FORCE_TERMINAL_IMAGES` setting iTerm2 and Rio need
+- `scripts/doctor.sh` checks the installed converters and whether the terminal can show pictures, including the `CLAUDE_CODE_FORCE_TERMINAL_IMAGES` setting iTerm2 and Rio need
 - `demo/record.sh` records a demo from a scenario file in kitty, without typing into your screen

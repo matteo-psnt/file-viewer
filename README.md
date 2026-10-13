@@ -30,7 +30,7 @@ sudo apt install libreoffice-writer libreoffice-impress libreoffice-calc libreof
 
 LibreOffice is only for Word, PowerPoint and Excel. Without it, macOS falls back to Quick Look, which gets every page but only roughly the right layout, and Linux can't open them at all.
 
-`sh bin/doctor.sh`, run from the plugin's folder, tells you what's missing and whether your terminal can show pictures.
+`sh scripts/doctor.sh`, run from the plugin's folder, tells you what's missing and whether your terminal can show pictures.
 
 ## Terminals
 

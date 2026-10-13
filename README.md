@@ -73,6 +73,10 @@ Ask in plain words, like "show me slide 12 of the lecture" or "open my report in
 
 In the viewer, `↑`/`↓` or `p`/`n` turn pages, `o` opens the file in its own app and `Esc` closes it. The keys work while the viewer has the keyboard; `ctrl+x tab` gives it back after you've typed in the prompt.
 
+## What it runs
+
+Everything happens on your machine. The plugin runs the converters above on the files you or Claude ask to preview, keeps the rendered pages in `~/Library/Caches/claude-file-viewer` (`~/.cache/claude-file-viewer` on Linux) and deletes them after 30 days unused, and opens a file in its own app only when you press open. It never uploads your files or sends them anywhere.
+
 The plugin API this uses is in early access, so a Claude Code update can break it.
 
 ## License

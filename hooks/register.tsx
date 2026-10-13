@@ -744,7 +744,7 @@ export const register: Register = (on, options: PluginOptions) => {
     }
 
     return moved
-  })
+  }).catch(($, e, next) => next(e))
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
     if (e.surface !== 'terminal') {

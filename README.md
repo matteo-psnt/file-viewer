@@ -73,7 +73,7 @@ Ask in plain words, like "show me slide 12 of the lecture" or "open my report in
 
 In the viewer, `↑`/`↓` or `p`/`n` turn pages, `o` opens the file in its own app and `Esc` closes it. The keys work while the viewer has the keyboard; `ctrl+x tab` gives it back after you've typed in the prompt.
 
-Everything runs on your machine, and the plugin never uploads your files.
+Everything runs on your machine, and the plugin never uploads your files. See [PRIVACY.md](PRIVACY.md).
 
 The plugin API this uses is in early access, so a Claude Code update can break it.
 

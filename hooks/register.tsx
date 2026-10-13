@@ -80,7 +80,7 @@ async function renderImage(
   source: string,
   page: number,
 ): Promise<ImagePreview> {
-  const script = `${$.plugin.root}/bin/render.sh`
+  const script = `${$.plugin.root}/scripts/render.sh`
   const ran = await $.process.run(['/bin/sh', script, source, String(page)], {
     timeoutMs: 120_000,
   })
@@ -287,7 +287,7 @@ async function runProbe($: EngineInterface, attempt = 0) {
     return
   }
   const site = { requestId: probe.bandId, key: 'probe' }
-  const probeFile = `${$.plugin.root}/bin/probe.png`
+  const probeFile = `${$.plugin.root}/assets/probe.png`
   const blitFile = () =>
     $.ui.blit({ ...site, source: { file: probeFile, format: 'png' } }).catch((err: Error) => ({ deny: err.message }))
   // The first file swap can come back as "not yet said ... blit again" while
@@ -492,7 +492,7 @@ async function turnViewer($: EngineInterface, p: ImagePreview, page: number) {
 }
 
 function openExternally($: EngineInterface, source: string) {
-  void $.process.run(['/bin/sh', `${$.plugin.root}/bin/open.sh`, source]).catch(() => undefined)
+  void $.process.run(['/bin/sh', `${$.plugin.root}/scripts/open.sh`, source]).catch(() => undefined)
 }
 
 // Drawn in place of the picture where the terminal can't show one: why, what
@@ -536,7 +536,7 @@ function footerHints(isFocused: boolean, isPaged: boolean) {
 // have no Image element, so a page reaches them as a JPEG inside an SVG,
 // kept under the 128 KiB they take.
 async function remoteSvg($: EngineInterface, value: ImagePreview) {
-  const script = `${$.plugin.root}/bin/jpeg.sh`
+  const script = `${$.plugin.root}/scripts/jpeg.sh`
   const ran = await $.process.run(['/bin/sh', script, value.png, '800'])
   const jpeg = (await $.fs.read(ran.stdout.trim(), { as: 'bytes' })).base64
 

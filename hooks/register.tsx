@@ -171,12 +171,6 @@ function pageLabel(p: ImagePreview) {
   return p.pages > 1 ? ` · page ${p.page}/${p.pages}` : ''
 }
 
-function progressBar(page: number, pages: number, width: number) {
-  const filled = Math.max(1, Math.round((page / pages) * width))
-
-  return '━'.repeat(filled) + '─'.repeat(Math.max(0, width - filled))
-}
-
 // How a picture reaches the terminal: by path, which the terminal reads itself,
 // or as bytes in the drawing. A terminal on another machine (ssh), Warp and
 // a Windows terminal in front of WSL cannot read this machine's files.
@@ -873,7 +867,7 @@ export const register: Register = (on, options: PluginOptions) => {
     )
   })
 
-  on('session.end', ($, e, next) => {
+  on('session.end', (_$, e, next) => {
     for (const id of [...animations.keys()]) {
       stopAnimation(id)
     }

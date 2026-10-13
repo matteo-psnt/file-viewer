@@ -18,7 +18,7 @@ def capture(window, out):
             path = os.path.join(out, f"{n:05d}.png")
             subprocess.run(["screencapture", "-x", "-o", f"-l{window}", path], check=False)
             if os.path.exists(path):
-                log.write(f"{path} {time.time() - start:.3f}\n")
+                log.write(f"{path}\t{time.time() - start:.3f}\n")
                 log.flush()
                 n += 1
             time.sleep(0.08)
@@ -33,8 +33,13 @@ def signature(path):
     ).stdout
 
 
+def quote(path):
+    # ffmpeg's concat lists take single-quoted paths, a quote written '\''.
+    return "'" + path.replace("'", "'\\''") + "'"
+
+
 def build(out, base):
-    rows = [line.split() for line in open(os.path.join(out, "times.txt"))]
+    rows = [line.rstrip("\n").rsplit("\t", 1) for line in open(os.path.join(out, "times.txt"))]
     frames = [(p, float(t)) for p, t in rows]
     sigs = [signature(p) for p, _ in frames]
     keep = []
@@ -54,8 +59,8 @@ def build(out, base):
     listing = os.path.join(out, "list.txt")
     with open(listing, "w") as f:
         for path, held, _ in keep:
-            f.write(f"file '{path}'\nduration {held:.3f}\n")
-        f.write(f"file '{keep[-1][0]}'\n")
+            f.write(f"file {quote(path)}\nduration {held:.3f}\n")
+        f.write(f"file {quote(keep[-1][0])}\n")
     scale = "scale=1100:-1:flags=lanczos"
     subprocess.run(
         ["ffmpeg", "-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", listing,

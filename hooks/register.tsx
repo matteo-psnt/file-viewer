@@ -141,7 +141,12 @@ function restore($: EngineInterface, id: string, value: ImagePreview) {
   $.clock.after(0, () => {
     void renderImage($, value.source, value.page)
       .then(fresh => remember($, id, { ...fresh, caption: value.caption, size: value.size }))
-      .catch(() => remember($, id, { kind: 'unsupported', source: value.source, reason: 'the file is no longer there' }))
+      // Only a missing file is permanent; a timeout or a missing tool may pass.
+      .catch(async () => {
+        if (!(await $.fs.exists(value.source))) {
+          await remember($, id, { kind: 'unsupported', source: value.source, reason: 'the file is no longer there' })
+        }
+      })
       .finally(() => rerendering.delete(id))
   })
 }
@@ -278,9 +283,6 @@ async function runProbe($: EngineInterface, attempt = 0) {
   probe.phase = 'done'
   transport = undefined
   $.ui.invalidate('ui.render')
-  await $.fs
-    .write('/tmp/asset-viewer-probe.json', JSON.stringify({ ...probe, file: byFile.deny ?? 'ok' }, null, 1))
-    .catch(() => undefined)
 }
 
 async function transportOf($: EngineInterface): Promise<Transport> {
@@ -347,6 +349,8 @@ function prefetch($: EngineInterface, p: ImagePreview) {
 // Animation: a keyed Image whose source a timer swaps frame by frame.
 type Animation = { timer?: Timer; frame: number; loops: number; misses: number }
 const animations = new Map<string, Animation>()
+// Animations started this load: a redraw must not restart one that finished.
+const started = new Set<string>()
 
 function stopAnimation(id: string) {
   animations.get(id)?.timer?.cancel()
@@ -417,16 +421,22 @@ async function thumbsFor($: EngineInterface, p: ImagePreview): Promise<Thumb[] |
     return undefined
   }
 
-  return Promise.all(
+  // A page that fails to render is left out rather than failing the viewer.
+  const thumbs = await Promise.all(
     sidebarPages(p.page, p.pages).map(async page => {
-      const one = page === p.page ? p : await renderImage($, p.source, page)
+      const one = page === p.page ? p : await renderImage($, p.source, page).catch(() => undefined)
 
-      return { page, png: one.png, width: one.width, height: one.height }
+      return one && { page, png: one.png, width: one.width, height: one.height }
     }),
   )
+
+  return thumbs.filter(t => t !== undefined)
 }
 
 async function showInViewer($: EngineInterface, p: ImagePreview) {
+  // The pane's animation belongs to what it showed before; this one starts afresh.
+  stopAnimation(`${PANE}/page`)
+  started.delete(`${PANE}/page`)
   await update($, viewer, () => ({ preview: p, thumbs: undefined }))
   const thumbs = await thumbsFor($, p)
   await update($, viewer, state => (state?.preview.png === p.png ? { preview: p, thumbs } : state))
@@ -434,7 +444,6 @@ async function showInViewer($: EngineInterface, p: ImagePreview) {
   if (p.pages > 1) {
     void $.ui.focus({ requestId: PANE, key: `thumb:${p.page}` }).catch(() => undefined)
   }
-  prefetch($, p)
 }
 
 async function openViewer($: EngineInterface, value: ImagePreview) {
@@ -496,8 +505,7 @@ export const register: Register = (on, options: PluginOptions) => {
   transport = undefined
   Object.assign(probe, { phase: 'idle', bandId: undefined, verdict: undefined, blocked: undefined })
   transportSetting = options.transport ?? 'auto'
-  // Animations started this load: a redraw must not restart one that finished.
-  const started = new Set<string>()
+  started.clear()
 
   on('session.start', async ($, e, next) => {
     const result = await next(e)
@@ -732,7 +740,7 @@ export const register: Register = (on, options: PluginOptions) => {
     }
     const state = await read($, viewer)
     if (state !== null && state.preview.page !== page) {
-      void turnViewer($, state.preview, page)
+      void turnViewer($, state.preview, page).catch(() => undefined)
     }
 
     return moved
@@ -783,7 +791,7 @@ export const register: Register = (on, options: PluginOptions) => {
         }),
       ),
     )
-    const go = (page: number) => turnViewer($, p, page)
+    const go = (page: number) => turnViewer($, p, page).catch(() => undefined)
     const pageButton = (page: number, isCurrent: boolean) => (
       <Button key={`thumb:${page}`} label={`${page}`} plain dimColor={!isCurrent} onPress={() => go(page)} />
     )

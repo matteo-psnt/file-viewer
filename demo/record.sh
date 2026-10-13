@@ -47,7 +47,7 @@ env -u CLAUDECODE -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_ENTRYPOINT -u CLAU
   --title asset-viewer-demo --directory "$repo" \
   claude --permission-mode "${mode:-default}" --allowedTools "$tools" >/dev/null 2>&1 &
 kpid=$!
-trap 'kill $kpid 2>/dev/null || true' EXIT
+trap 'kill $kpid ${cpid:-} 2>/dev/null || true' EXIT
 
 # Wait for Claude Code's status line, so the first keys aren't swallowed.
 i=0

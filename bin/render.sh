@@ -22,6 +22,8 @@ fi
 # shellcheck disable=SC2088
 case "$cache" in "~/"*) cache="$HOME/${cache#\~/}" ;; esac
 mkdir -p "$cache"
+# Drop what nothing has used for a month; a preview that needs it renders again.
+find "$cache" -mindepth 1 -maxdepth 1 -mtime +30 -exec rm -rf {} + 2>/dev/null || true
 # shellcheck disable=SC2088
 case "$src" in "~/"*) src="$HOME/${src#\~/}" ;; esac
 [ -f "$src" ] || { echo "no such file: $src" >&2; exit 2; }
@@ -37,7 +39,8 @@ im_identify() {
   if has magick; then magick identify "$@"; else identify "$@"; fi
 }
 
-mtime_of() { stat -f %m "$1" 2>/dev/null || stat -c %Y "$1"; }
+# GNU first: GNU `stat -f` means filesystem status and would print that too.
+mtime_of() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1"; }
 
 hash_of() {
   if has md5; then md5 -q -s "$1"; else printf '%s' "$1" | md5sum | cut -d' ' -f1; fi
@@ -62,21 +65,24 @@ pages=1
 frames=-
 note=-
 
-# Any still image to a PNG at most 1600 px on its long side.
+# Any still image to a PNG at most 1600 px on its long side. Written beside
+# the target and moved into place, so a killed render leaves no half a PNG.
 to_png() {
   [ -f "$2" ] && return 0
+  part="${2%.png}.part$$.png"
   if has sips; then
     # sips also enlarges small images, so only resample ones over the limit.
     long=$(sips -g pixelWidth -g pixelHeight "$1" | awk '/pixel(Width|Height)/ { if ($2 > m) m = $2 } END { print m + 0 }')
     if [ "$long" -gt 1600 ]; then
-      sips -s format png --resampleHeightWidthMax 1600 "$1" --out "$2" >/dev/null
+      sips -s format png --resampleHeightWidthMax 1600 "$1" --out "$part" >/dev/null
     else
-      sips -s format png "$1" --out "$2" >/dev/null
+      sips -s format png "$1" --out "$part" >/dev/null
     fi
   else
     has magick || has convert || { echo "previewing .$ext needs ImageMagick" >&2; exit 4; }
-    im "$1[0]" -auto-orient -resize '1600x1600>' "$2"
+    im "$1[0]" -auto-orient -resize '1600x1600>' "$part"
   fi
+  mv "$part" "$2"
 }
 
 size_of() {
@@ -183,7 +189,10 @@ render_pdf() {
   pages=${pages:-1}
   [ "$page" -gt "$pages" ] && page=$pages
   out="$cache/$doc-p$page.png"
-  [ -f "$out" ] || pdftoppm -f "$page" -l "$page" -png -r 120 -singlefile "$1" "${out%.png}"
+  if [ ! -f "$out" ]; then
+    pdftoppm -f "$page" -l "$page" -png -r 120 -singlefile "$1" "${out%.png}.part$$"
+    mv "${out%.png}.part$$.png" "$out"
+  fi
 }
 
 # Animated images: one PNG per frame, composited, with each frame's delay.
@@ -262,7 +271,10 @@ case "$ext" in
     ;;
   svg|svgz)
     need rsvg-convert "librsvg"
-    [ -f "$out" ] || rsvg-convert -w 1400 --keep-aspect-ratio -b white "$src" -o "$out"
+    if [ ! -f "$out" ]; then
+      rsvg-convert -w 1400 --keep-aspect-ratio -b white "$src" -o "$out.part$$"
+      mv "$out.part$$" "$out"
+    fi
     ;;
   key|pages|numbers)
     iwork_preview || { echo "no preview inside this .$ext file" >&2; exit 3; }
@@ -280,10 +292,11 @@ if [ "$bytes" -gt 1900000 ] && [ "$frames" = - ]; then
   small="${out%.png}-s.png"
   if [ ! -f "$small" ]; then
     if has sips; then
-      sips -s format png --resampleHeightWidthMax 1000 "$out" --out "$small" >/dev/null
+      sips -s format png --resampleHeightWidthMax 1000 "$out" --out "${small%.png}.part$$.png" >/dev/null
     else
-      im "$out" -resize '1000x1000>' "$small"
+      im "$out" -resize '1000x1000>' "${small%.png}.part$$.png"
     fi
+    mv "${small%.png}.part$$.png" "$small"
   fi
   out=$small
 fi

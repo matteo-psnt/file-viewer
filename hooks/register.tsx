@@ -1,4 +1,3 @@
-import { atom, read, update } from 'claude-code'
 import type { Elements, EngineInterface, ImageSource, PluginOptions, Register, Timer } from 'claude-code'
 
 import type { Frame, Preview, Size, Thumb, Viewer } from '../types'
@@ -26,8 +25,39 @@ const FORMAT: Record<string, string> = {
   gif: 'GIF', webp: 'WebP', heic: 'HEIC', heif: 'HEIF',
 }
 
-const previews = atom({ plugin: 'file-viewer', key: 'previews' } as const, {})
-const viewer = atom({ plugin: 'file-viewer', key: 'viewer' } as const, null)
+// The plugin's two state values, read and written through $.state. A read
+// made while a hook draws subscribes the drawing, so a write redraws it.
+async function getPreviews($: EngineInterface): Promise<Record<string, Preview>> {
+  return (await $.state.get({ plugin: 'file-viewer', key: 'previews' })).value ?? {}
+}
+
+async function updatePreviews($: EngineInterface, change: (all: Record<string, Preview>) => Record<string, Preview>) {
+  for (;;) {
+    const held = await $.state.get({ plugin: 'file-viewer', key: 'previews' })
+    const written = await $.state.set({ plugin: 'file-viewer', key: 'previews' }, change(held.value ?? {}), {
+      ifVersion: held.version,
+    })
+    if (written.isSet) {
+      return
+    }
+  }
+}
+
+async function getViewer($: EngineInterface): Promise<Viewer | null> {
+  return (await $.state.get({ plugin: 'file-viewer', key: 'viewer' })).value ?? null
+}
+
+async function updateViewer($: EngineInterface, change: (state: Viewer | null) => Viewer | null) {
+  for (;;) {
+    const held = await $.state.get({ plugin: 'file-viewer', key: 'viewer' })
+    const written = await $.state.set({ plugin: 'file-viewer', key: 'viewer' }, change(held.value ?? null), {
+      ifVersion: held.version,
+    })
+    if (written.isSet) {
+      return
+    }
+  }
+}
 
 function nameOf(path: string) {
   return path.split('/').pop() ?? path
@@ -107,7 +137,7 @@ async function preview($: EngineInterface, source: string, page: number): Promis
 // The session's state draws this session; the store keeps each preview so a
 // resumed conversation draws its old rows again.
 async function remember($: EngineInterface, id: string, value: Preview) {
-  await update($, previews, all => {
+  await updatePreviews($, all => {
     const kept = Object.entries(all).filter(([key]) => key !== id).slice(-(KEEP - 1))
 
     return { ...Object.fromEntries(kept), [id]: value }
@@ -122,7 +152,7 @@ async function remember($: EngineInterface, id: string, value: Preview) {
 }
 
 async function lookup($: EngineInterface, id: string): Promise<Preview | undefined> {
-  const live = (await read($, previews))[id]
+  const live = (await getPreviews($))[id]
   if (live !== undefined) {
     return live
   }
@@ -434,9 +464,9 @@ async function showInViewer($: EngineInterface, p: ImagePreview) {
   // The pane's animation belongs to what it showed before; this one starts afresh.
   stopAnimation(`${PANE}/page`)
   started.delete(`${PANE}/page`)
-  await update($, viewer, () => ({ preview: p, thumbs: undefined }))
+  await updateViewer($, () => ({ preview: p, thumbs: undefined }))
   const thumbs = await thumbsFor($, p)
-  await update($, viewer, state => (state?.preview.png === p.png ? { preview: p, thumbs } : state))
+  await updateViewer($, state => (state?.preview.png === p.png ? { preview: p, thumbs } : state))
   // Keep the focus ring on the current page so the next arrow moves one page.
   if (p.pages > 1) {
     void $.ui.focus({ requestId: PANE, key: `thumb:${p.page}` }).catch(() => undefined)
@@ -562,7 +592,7 @@ export const register: Register = (on, options: PluginOptions) => {
     return { text: `Opened ${nameOf(value.source)} in the viewer.` }
   })
 
-  on('tool.call', { tool: FULL_TOOL }, async ($, e) => {
+  on('tool.call', { tool: 'mcp__file-viewer__preview' }, async ($, e) => {
     const input = e as unknown as {
       path: string
       page?: number
@@ -728,27 +758,27 @@ export const register: Register = (on, options: PluginOptions) => {
     }
     // Past the first or last thumbnail the ring would walk on to the footer
     // buttons or the close mark, and the arrows would stop paging. Keep it.
-    if (!Number.isFinite(page) && ((await read($, viewer))?.preview.pages ?? 0) > 1) {
+    if (!Number.isFinite(page) && ((await getViewer($))?.preview.pages ?? 0) > 1) {
       return {}
     }
     const moved = await next(e)
     if (moved.deny !== undefined || !Number.isFinite(page)) {
       return moved
     }
-    const state = await read($, viewer)
+    const state = await getViewer($)
     if (state !== null && state.preview.page !== page) {
       void turnViewer($, state.preview, page).catch(() => undefined)
     }
 
     return moved
-  }).catch(($, e, next) => next(e))
+  })
 
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
+  on('ui.render', { component: 'Pane', requestId: 'file-viewer' }, async ($, e, next) => {
     if (e.surface !== 'terminal') {
       return next(e)
     }
     const { Box, Text, Button } = $.ui.resolve(e)
-    const state: Viewer | null = await read($, viewer)
+    const state: Viewer | null = await getViewer($)
     if (state === null) {
       return <Text dimColor>Nothing open. Use /view &lt;path&gt;.</Text>
     }

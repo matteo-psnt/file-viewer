@@ -4,7 +4,7 @@ A Claude Code plugin that shows PDFs, slides, spreadsheets and images inline, ri
 
 Claude Code can read a PDF or a screenshot, but you never see it. With this plugin Claude puts the page under its message, so when it talks about the chart on slide 12 you're looking at slide 12 too. You can also open any file yourself with `/view <path>`.
 
-![Claude writes an SVG bar chart of a week of running and shows it inline](demo/demo.gif)
+![Claude shows slide 3 of a deck inline and answers from it, then /view opens the deck with a thumbnail strip](demo/demo.gif)
 
 ## Install
 

@@ -4,13 +4,13 @@
 
 First version.
 
-- `preview` tool Claude can call to put a file inline under its tool row
-- `/view <path> [page]` and a viewer pane with a page sidebar, arrow-key paging and the layout note
-- Inline previews drawn as a card with quiet text controls
-- PDFs; Word, PowerPoint and Excel through LibreOffice or Quick Look plus headless Chrome; images through `sips`; SVG through `rsvg-convert`
+- `preview` tool Claude calls to put a file inline under its tool row, as a card with the file's name, page count and controls to page, replay, open the viewer or open the file in its own app
+- `/view <path> [page]` opens a viewer pane. Portrait pages get a thumbnail column on the left and landscape pages (slides) a strip underneath; `↑`/`↓` or `p`/`n` turn pages, `o` opens the file, `Esc` closes it, and the footer says when the pane doesn't have the keyboard
+- PDFs; Word, PowerPoint and Excel through LibreOffice, or Quick Look and headless Chrome on macOS without it; images through `sips` or ImageMagick; SVG through `rsvg-convert`; the first page of Keynote, Pages and Numbers files
 - Animated GIF and WebP playback
-- Previews saved to the plugin store so resumed conversations draw them again
+- Previews saved to the plugin store, so resumed conversations draw them again
 - Linux support for the converter (ImageMagick, LibreOffice, XDG cache)
 - Pictures sent as bytes over ssh, in Warp and under WSL, with an "Image transport" setting to override
-- A notice where pictures can't show (Claude Agents, tmux, terminals Claude Code doesn't draw pictures in) saying why and what would fix it, with a button to open the file in its own app
-- `bin/doctor.sh` to check installed converters and whether the terminal draws placeholder images
+- Where Claude Code won't draw pictures (Claude Agents sessions, tmux, terminals other than Ghostty and kitty), a notice saying why and what would fix it, with a button to open the file in its own app; Claude gets the same reason
+- `bin/doctor.sh` checks the installed converters and whether the terminal can show pictures, including the `CLAUDE_CODE_FORCE_TERMINAL_IMAGES` setting iTerm2 and Rio need
+- `demo/record.sh` records a demo from a scenario file in kitty, without typing into your screen

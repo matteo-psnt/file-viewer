@@ -54,7 +54,7 @@ The same setting turns pictures on in Claude Agents sessions (the ones you open 
 | Terminal.app, Alacritty, Windows Terminal, foot | No kitty graphics |
 | tmux, screen | No. Claude Code doesn't send pictures through them |
 
-I tested Ghostty, iTerm2 3.7.4, Rio 0.5.28, Warp, Terminal.app and Claude Agents on macOS. The other rows come from each terminal's docs.
+I tested Ghostty, kitty 0.49, iTerm2 3.7.4, Rio 0.5.28, Warp, Terminal.app and Claude Agents on macOS. The other rows come from each terminal's docs.
 
 Where pictures can't show, the preview is a short notice saying why and what would fix it, with a button to open the file in its own app. Claude gets the same message, so it describes the file in words instead.
 
@@ -79,7 +79,7 @@ Ask for it in plain words, like "show me slide 12 of the lecture" or "open my re
 
 Each preview is a card with the file's name and page count, and controls under the picture to turn the page, replay an animation, open the viewer, or open the file in its own app. Clicking them needs a terminal that reports mouse clicks to Claude Code, which fullscreen mode does.
 
-The viewer shows one page large with the pages around it in a sidebar. While it's open, `↑` and `↓` (or `p` and `n`) turn pages, `o` opens the file in its own app, and `Esc` closes it. Clicking a page in the sidebar jumps there.
+The viewer shows one page large with thumbnails of the pages around it: in a column on the left for portrait pages like a report, and in a strip underneath for slides. While it has the keyboard, `↑` and `↓` (or `p` and `n`) turn pages, `o` opens the file in its own app, and `Esc` closes it. Typing in the prompt takes the keyboard back; click the viewer or press `ctrl+x tab` to return, and the footer tells you which is which. Clicking a thumbnail's number jumps to that page.
 
 ## How it works
 
@@ -105,7 +105,7 @@ sh tests/converter.sh
 
 The first two check the hooks module against Claude Code. The last runs the converter over `tests/fixtures`, and CI runs it on macOS and Ubuntu.
 
-To re-record the demo, install [kitty](https://sw.kovidgoyal.net/kitty/) and run `sh demo/record.sh demo/scenarios/slides.txt`. It plays the scenario in a kitty window through kitty's remote control and writes a GIF and an MP4 to `demo/out`; the window doesn't need to be in front.
+To re-record the demo, install [kitty](https://sw.kovidgoyal.net/kitty/) and run `sh demo/record.sh demo/scenarios/chart.txt`, which made the GIF above. It plays the scenario in a kitty window through kitty's remote control and writes a GIF and an MP4 to `demo/out`; the window doesn't need to be in front.
 
 The plugin API this uses is in early access, so a Claude Code update can break it.
 

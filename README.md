@@ -1,5 +1,9 @@
 # file-viewer
 
+[![CI](https://github.com/matteo-psnt/file-viewer/actions/workflows/ci.yml/badge.svg)](https://github.com/matteo-psnt/file-viewer/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/matteo-psnt/file-viewer)](https://github.com/matteo-psnt/file-viewer/releases)
+[![License: MIT](https://img.shields.io/github/license/matteo-psnt/file-viewer)](LICENSE)
+
 A Claude Code plugin that shows PDFs, slides, spreadsheets and images inline, right in the conversation.
 
 Claude Code can read a PDF or a screenshot, but you never see it. With this plugin Claude puts the page under its message, so when it talks about the chart on slide 12 you're looking at slide 12 too. You can also open any file yourself with `/view <path>`.

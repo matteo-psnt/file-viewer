@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.1](https://github.com/matteo-psnt/file-viewer/compare/v0.1.0...v0.1.1) (2026-10-13)
+
+
+### Bug Fixes
+
+* **viewer:** fall back to Claude Code's focus handling if the focus hook fails ([1021ba0](https://github.com/matteo-psnt/file-viewer/commit/1021ba0f9cdf691c94f60f55e14b596b437dc271))
+* **viewer:** pick the footer hint with a loop the directory's checker can read ([28ac24e](https://github.com/matteo-psnt/file-viewer/commit/28ac24e03e276c14b40184da75c79e00510e2386))
+
 ## 0.1.0 (2026-10-13)
 
 First version.

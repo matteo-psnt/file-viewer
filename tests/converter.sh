@@ -48,6 +48,10 @@ expect photo.heic 1 2 120 "converts HEIC"
 expect shape.svg 1 2 1400 "renders SVG at 1400 px"
 expect shape.svg 1 3 700 "keeps the SVG's aspect ratio"
 expect doc.docx 1 4 1 "converts a one-page Word file"
+# Without LibreOffice, macOS draws a spreadsheet from Quick Look as one trimmed page.
+if [ "$(uname -s)" = Darwin ] && ! command -v soffice >/dev/null 2>&1 && [ ! -x /Applications/LibreOffice.app/Contents/MacOS/soffice ]; then
+  expect sheet.xlsx 1 4 1 "draws a spreadsheet as one page through Quick Look"
+fi
 
 line=$(sh "$render" "$fixtures/spinner.gif" 1 "$cache")
 list=$(printf '%s' "$line" | cut -f7)

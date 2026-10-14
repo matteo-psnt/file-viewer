@@ -13,6 +13,7 @@
 #   view <path>              run /view <path>
 #   key <name>               press a key (down, up, escape, n, p...)
 #   pause <seconds>          hold the current screen
+#   shot <name>              save a screenshot as demo/out/<name>.png
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(dirname "$here")
@@ -84,6 +85,8 @@ while IFS= read -r line || [ -n "$line" ]; do
       k send-key "$arg"; sleep 2 ;;
     pause)
       sleep "$arg" ;;
+    shot)
+      screencapture -x -o -l"$window" "$out/$arg.png" || echo "shot $arg failed" >&2 ;;
   esac
 done <"$scenario"
 

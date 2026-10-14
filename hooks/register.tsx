@@ -861,8 +861,10 @@ export const register: Register = (on, options: PluginOptions) => {
     // The pane's own frame is the only border; inside it a header row, the
     // page with its thumbnails, an optional note row and one footer row.
     const room = (e.props.scroll?.bodyRows ?? 0) > 0 ? e.props.scroll.bodyRows : Math.max(12, (e.viewport?.rows ?? 30) - 10)
-    const bodyRows = Math.max(6, room - 4 - (p.note ? 1 : 0))
     const inner = Math.max(20, e.props.bodyColumns - 2)
+    // The note wraps rather than losing its end ("install LibreOffice…").
+    const noteRows = p.note ? Math.ceil((p.note.length + 2) / inner) : 0
+    const bodyRows = Math.max(6, room - 4 - noteRows)
     const thumbs = state.thumbs ?? []
     const count = Math.max(1, thumbs.length)
     // Landscape pages (slides) leave room underneath, so their thumbnails go in
@@ -964,7 +966,7 @@ export const register: Register = (on, options: PluginOptions) => {
             {page}
           </Box>
         )}
-        {p.note && <Text dimColor italic wrap="truncate-end">ⓘ {p.note}</Text>}
+        {p.note && <Text dimColor italic>ⓘ {p.note}</Text>}
         <Box flexDirection="row" justifyContent="space-between" gap={2} marginTop={1}>
           <Box flexDirection="row" gap={2}>
             {isPaged && <Button key="prev" label="prev" hotkey="p" plain dimColor onPress={() => go(p.page - 1)} />}

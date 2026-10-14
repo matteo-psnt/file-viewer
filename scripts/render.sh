@@ -171,6 +171,38 @@ office_to_pdf() {
   [ -f "$pdf" ]
 }
 
+# A spreadsheet without LibreOffice: Quick Look's HTML holds the sheet as a
+# table, and printing it leaves a tiny table on a letter page with its grid
+# lines gone. A screenshot of the page, trimmed to the table, reads better.
+# Quick Look leaves out charts either way; their empty <img> is hidden.
+sheet_snapshot() {
+  out="$cache/$doc-p1.png"
+  [ -f "$out" ] && return 0
+  has qlmanage || return 1
+  browser=$(chrome) || return 1
+  work="$cache/$doc-work"
+  rm -rf "$work"
+  mkdir -p "$work"
+  with_timeout 60 qlmanage -p -o "$work" "$src" >/dev/null 2>&1 || true
+  ql=$(first "$work"/*.qlpreview || true)
+  if [ -z "$ql" ] || [ ! -f "$ql/Preview.html" ]; then rm -rf "$work"; return 1; fi
+  sed -e "s|</head>|<style>img{display:none!important} html,body{background:#fff!important} body{zoom:2}</style></head>|" \
+    "$ql/Preview.html" > "$ql/shot.html"
+  with_timeout 60 "$browser" --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=2 \
+    --window-size=1400,3000 --user-data-dir="$work/profile" --screenshot="$work/shot.png" "file://$ql/shot.html" \
+    >/dev/null 2>&1 || true
+  if [ -f "$work/shot.png" ]; then
+    if has magick || has convert; then
+      im "$work/shot.png" -trim +repage -bordercolor white -border 40 "$out.part$$.png"
+      mv "$out.part$$.png" "$out"
+    else
+      mv "$work/shot.png" "$out"
+    fi
+  fi
+  rm -rf "$work"
+  [ -f "$out" ]
+}
+
 # A page is blank when, rendered tiny in gray, almost no pixel is darker than
 # white. The PGM header's own few bytes stay under the threshold.
 is_blank_page() {
@@ -261,7 +293,9 @@ case "$ext" in
     render_pdf "$src"
     ;;
   docx|doc|pptx|ppt|xlsx|xls|rtf|odt|odp|ods)
-    if office_to_pdf; then
+    if ! soffice_bin >/dev/null && case "$ext" in xlsx|xls|ods) true ;; *) false ;; esac && sheet_snapshot; then
+      note="approximate layout (Quick Look, no charts); install LibreOffice for exact pages"
+    elif office_to_pdf; then
       render_pdf "$cache/$doc.pdf"
       [ -f "$cache/$doc.approx" ] &&
         note="approximate layout (Quick Look); install LibreOffice for exact pages"
@@ -276,7 +310,18 @@ case "$ext" in
       rm -rf "$tmp"
       note="first page only; install LibreOffice or Chrome for every page"
     else
-      echo "previewing .$ext needs LibreOffice (soffice)" >&2
+      case "$ext" in
+        pptx|ppt|odp) part=impress ;;
+        xlsx|xls|ods) part=calc ;;
+        *) part=writer ;;
+      esac
+      if has apt-get; then how="sudo apt install libreoffice-$part"
+      elif has dnf; then how="sudo dnf install libreoffice-$part"
+      elif has pacman; then how="sudo pacman -S libreoffice-fresh"
+      elif has brew; then how="brew install --cask libreoffice"
+      else how="install LibreOffice from libreoffice.org"
+      fi
+      echo "previewing .$ext needs LibreOffice; install it with: $how" >&2
       exit 4
     fi
     ;;

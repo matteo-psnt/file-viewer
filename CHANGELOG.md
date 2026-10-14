@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.0](https://github.com/matteo-psnt/file-viewer/compare/v0.1.1...v0.2.0) (2026-10-14)
+
+
+### Features
+
+* **demo:** add a shot step to the recorder ([429724f](https://github.com/matteo-psnt/file-viewer/commit/429724f16e0a2cb28edd3758fd0fa6ce65613890))
+
+
+### Bug Fixes
+
+* **converter:** clearer spreadsheets and install advice without LibreOffice ([b9d999a](https://github.com/matteo-psnt/file-viewer/commit/b9d999a236eb850e2994cdffcf188e6c090ea5d8))
+* **viewer:** wrap the conversion note instead of cutting it off ([2db4983](https://github.com/matteo-psnt/file-viewer/commit/2db49837609bf28bbcd19c5f97eea76e82e35822))
+
 ## [0.1.1](https://github.com/matteo-psnt/file-viewer/compare/v0.1.0...v0.1.1) (2026-10-13)
 
 

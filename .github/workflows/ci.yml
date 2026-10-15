@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: shellcheck -s sh scripts/*.sh tests/converter.sh demo/record.sh
+      - run: shellcheck -s sh scripts/*.sh tests/converter.sh demo/record.sh .githooks/commit-msg
 
   converter-linux:
     name: Converter on Linux

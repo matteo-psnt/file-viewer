@@ -224,7 +224,7 @@ type Probe = {
 }
 const probe: Probe = { phase: 'idle' }
 const PROBE_BYTES =
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNgAAIAAAUAAen63NgAAAAASUVORK5CYII='
 
 // Why pictures can't show, and what would make them show, in words for the
 // person and for Claude. Claude Code turns pictures on only for Ghostty and
@@ -532,6 +532,20 @@ function footerHints(isFocused: boolean, isPaged: boolean) {
   return [isPaged ? '↑↓ pages · esc close' : '', 'esc close']
 }
 
+// The desktop app, the editor and the mobile app draw an Svg as an image but
+// have no Image element, so a page reaches them as a JPEG inside an SVG,
+// kept under the 128 KiB they take.
+async function remoteSvg($: EngineInterface, value: ImagePreview) {
+  const script = `${$.plugin.root}/scripts/jpeg.sh`
+  const ran = await $.process.run(['/bin/sh', script, value.png, '800'])
+  const jpeg = (await $.fs.read(ran.stdout.trim(), { as: 'bytes' })).base64
+
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${value.width} ${value.height}">` +
+    `<image href="data:image/jpeg;base64,${jpeg}" width="${value.width}" height="${value.height}"/></svg>`
+  )
+}
+
 function unsupportedText(value: Extract<Preview, { kind: 'unsupported' }>) {
   return `Can't preview ${nameOf(value.source)}: ${value.reason}. Supported: ${SUPPORTED}.`
 }
@@ -655,8 +669,36 @@ export const register: Register = (on, options: PluginOptions) => {
       return next(e)
     }
     const value = await lookup($, e.requestId)
-    if (value === undefined || e.surface !== 'terminal') {
+    if (value === undefined) {
       return next(e)
+    }
+    if (e.surface !== 'terminal') {
+      if (value.kind !== 'image' || !(await $.fs.exists(value.png))) {
+        return next(e)
+      }
+      const { Box, Text, Svg, Button } = $.ui.resolve(e)
+      const id = e.requestId
+      const isPaged = value.pages > 1
+
+      return (
+        <Box flexDirection="column" gap={1}>
+          <Text>
+            <Text bold>{formatOf(value.source)}</Text> {nameOf(value.source)}
+            {pageLabel(value)}
+          </Text>
+          {value.caption && <Text dimColor italic>{value.caption}</Text>}
+          <Svg
+            source={await remoteSvg($, value)}
+            alt={`${nameOf(value.source)}${pageLabel(value)}`}
+            width={Math.min(640, value.width)}
+          />
+          <Box flexDirection="row" gap={2}>
+            {isPaged && <Button key="prev" label="◀ prev" onPress={() => turnInline($, id, value, value.page - 1)} />}
+            {isPaged && <Button key="next" label="next ▶" onPress={() => turnInline($, id, value, value.page + 1)} />}
+            <Button key="open" label="open in app" onPress={() => openExternally($, value.source)} />
+          </Box>
+        </Box>
+      )
     }
     const { Box, Text, Button, Image } = $.ui.resolve(e)
     const id = e.requestId
@@ -783,7 +825,28 @@ export const register: Register = (on, options: PluginOptions) => {
 
   on('ui.render', { component: 'Pane', requestId: 'file-viewer' }, async ($, e, next) => {
     if (e.surface !== 'terminal') {
-      return next(e)
+      const remote = await getViewer($)
+      if (remote === null || !(await $.fs.exists(remote.preview.png))) {
+        return next(e)
+      }
+      const { Box, Text, Svg, Button } = $.ui.resolve(e)
+      const p = remote.preview
+      const isPaged = p.pages > 1
+
+      return (
+        <Box flexDirection="column" gap={1}>
+          <Text>
+            <Text bold>{formatOf(p.source)}</Text> {nameOf(p.source)}
+            {pageLabel(p)}
+          </Text>
+          <Svg source={await remoteSvg($, p)} alt={`${nameOf(p.source)}${pageLabel(p)}`} />
+          <Box flexDirection="row" gap={2}>
+            {isPaged && <Button key="prev" label="◀ prev" onPress={() => turnViewer($, p, p.page - 1).catch(() => undefined)} />}
+            {isPaged && <Button key="next" label="next ▶" onPress={() => turnViewer($, p, p.page + 1).catch(() => undefined)} />}
+            <Button key="open" label="open in app" onPress={() => openExternally($, p.source)} />
+          </Box>
+        </Box>
+      )
     }
     const { Box, Text, Button } = $.ui.resolve(e)
     const state: Viewer | null = await getViewer($)

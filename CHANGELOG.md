@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/matteo-psnt/file-viewer/compare/v0.2.0...v0.3.0) (2026-10-15)
+
+
+### Features
+
+* show previews in the desktop app and editor ([#3](https://github.com/matteo-psnt/file-viewer/issues/3)) ([82697f1](https://github.com/matteo-psnt/file-viewer/commit/82697f17b73ce7f78679836418868c5683506b11))
+
 ## [0.2.0](https://github.com/matteo-psnt/file-viewer/compare/v0.1.1...v0.2.0) (2026-10-14)
 
 

@@ -1,7 +1,7 @@
 {
   "name": "file-viewer",
   "displayName": "File Viewer",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Inline previews of PDFs, Office files, images and animated GIFs in Claude Code, with a paging viewer and a preview tool Claude can call",
   "author": {
     "name": "Matteo Pesenti"

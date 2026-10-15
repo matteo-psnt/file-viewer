@@ -224,7 +224,7 @@ type Probe = {
 }
 const probe: Probe = { phase: 'idle' }
 const PROBE_BYTES =
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNgAAIAAAUAAen63NgAAAAASUVORK5CYII='
 
 // Why pictures can't show, and what would make them show, in words for the
 // person and for Claude. Claude Code turns pictures on only for Ghostty and

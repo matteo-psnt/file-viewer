@@ -257,8 +257,11 @@ function explainDeny(deny: string, termProgram: string | undefined): Blocked {
       fix: 'Run claude outside tmux, in Ghostty or kitty.',
     }
   }
+  // Claude Code names the terminal as "terminal iTerm2 3.7.4" or, from its
+  // environment, "terminal=Apple_Terminal".
   const named = deny.match(/, terminal ([^)]+)\)/)?.[1]?.trim()
-  const terminal = named ?? (termProgram === undefined ? undefined : (TERMINAL_NAMES[termProgram] ?? termProgram))
+  const fromEnv = deny.match(/terminal=([^,)\s]+)/)?.[1] ?? termProgram
+  const terminal = named ?? (fromEnv === undefined ? undefined : (TERMINAL_NAMES[fromEnv] ?? fromEnv))
   if (terminal?.startsWith('kitty')) {
     return { why: `Claude Code shows pictures in kitty 0.28 and newer, and this is ${terminal}.`, fix: 'Update kitty.' }
   }
@@ -272,7 +275,8 @@ function explainDeny(deny: string, termProgram: string | undefined): Blocked {
         }
       : { why: `Claude Code only shows pictures in Ghostty and kitty, and this is ${terminal}.`, fix: elsewhere }
   }
-  if (deny.includes('no reply to the graphics query')) {
+  // Newer Claude Code: "(env: terminal=Apple_Terminal, not asked yet, no answer)".
+  if (deny.includes('no reply to the graphics query') || /\bno answer\b/.test(deny)) {
     return { why: `${terminal ?? 'This terminal'} doesn't support kitty graphics, which Claude Code draws pictures with.`, fix: elsewhere }
   }
 

@@ -515,3 +515,17 @@ test('FILE_VIEWER_BLOCKS draws blocks without a note', async ($, on) => {
   expect((await ui.find({ key: 'pic' }))?.props).toMatchObject({ columns: 64, rows: 16 })
   expect(await ui.find({ type: 'Text', text: /Block preview/ })).toBeUndefined()
 })
+
+test('Terminal.app is named from the newer refusal', async ($, on) => {
+  mock.store(on)
+  on('fs.exists', () => ({ value: true }))
+  on('process.run', () => ok('/c/pic.png\t200\t200\t1\t1\t/a/pic.png\t-\t-\n'))
+  await startRefused(
+    $,
+    on,
+    'the Image draws its alt here: the terminal draws no placeholder images (env: terminal=Apple_Terminal, not asked yet, no answer)',
+  )
+
+  const ran = await $.tool.call(pngTool('t1'))
+  expect(ran.result).toContain("Terminal.app doesn't support kitty graphics")
+})

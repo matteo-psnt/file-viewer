@@ -55,7 +55,7 @@ if has qlmanage || has unzip; then ok "Keynote, Pages, Numbers (first page)"; el
 echo
 echo "Terminal (${TERM_PROGRAM:-unknown}, TERM=${TERM:-unset})"
 if [ -n "$TMUX" ]; then
-  no "Inside tmux: pictures usually don't get through. Run Claude Code outside tmux, or set FILE_VIEWER_BLOCKS=1 for block previews."
+  no "Inside tmux: Claude Code can't draw pictures through tmux, so previews are drawn in blocks. Run it outside tmux for the real picture."
 fi
 if [ -n "$SSH_CONNECTION$SSH_TTY" ]; then
   meh "Over ssh: pictures are sent as bytes, since your terminal can't read this machine's files."

@@ -46,17 +46,19 @@ Claude Code only draws pictures in [Ghostty](https://ghostty.org) and [kitty](ht
 }
 ```
 
-That applies everywhere you run Claude Code, so leave it out if you also use a terminal from the "No" rows below; you'd see stray characters there.
+That applies everywhere you run Claude Code, so leave it out if you also use a terminal from the "Blocks" rows below; you'd see stray characters there.
 
-| Terminal | Pictures |
+| Terminal | What you see |
 | --- | --- |
-| Ghostty, kitty 0.28+ | Yes |
-| iTerm2, Rio, Claude Agents sessions | With the setting above |
-| Warp, WezTerm, Konsole, VS Code | No. They don't draw the placeholders Claude Code uses |
-| Terminal.app, Alacritty, Windows Terminal, foot | No kitty graphics |
-| tmux, screen | No. Claude Code doesn't send pictures through them |
+| Ghostty, kitty 0.28+ | The real picture |
+| iTerm2, Rio, Claude Agents sessions | The real picture with the setting above, blocks without it |
+| Warp, WezTerm, Konsole, VS Code | Blocks. They don't draw the placeholders Claude Code uses |
+| Terminal.app, Alacritty, Windows Terminal, foot | Blocks. No kitty graphics |
+| tmux, screen | Blocks. Claude Code doesn't send pictures through them |
 
-Anywhere pictures can't show, you get a short notice saying why, with a button to open the file in its own app, and Claude describes the file in words instead. Over ssh and under WSL the plugin sends picture bytes instead of file paths; if that guess is wrong, change "Image transport" in `/config`.
+Where pictures can't show, the page is drawn in coloured block characters, four blocks to a character cell, with a line saying why and what would show the real picture. It's rough, but you can tell the slides apart and see the charts. Claude is told you see a block preview, so it describes small text and fine detail in words. The blocks come from ImageMagick, or from `sips` on macOS; with neither, you get a notice with a button to open the file in its own app.
+
+Click a picture to open the file in its own app. Over ssh and under WSL the plugin sends picture bytes instead of file paths; if that guess is wrong, change "Image transport" in `/config`.
 
 ## What it opens
 

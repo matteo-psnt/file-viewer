@@ -353,16 +353,166 @@ async function imageSource($: EngineInterface, png: string): Promise<ImageSource
   return { png: base64 }
 }
 
+// Where the terminal can't draw pictures, a page is drawn in block characters:
+// each cell holds 2 by 2 pixels in two colours, the quadrant glyph picking which
+// pixels take the foreground. Bit 0 is top left, 1 top right, 2 bottom left, 3
+// bottom right.
+const QUADRANTS = ' ▘▝▀▖▌▞▛▗▚▐▜▄▙▟█'
+const cellsOf = new Map<string, string>()
+
+type Rgb = [number, number, number]
+
+// The pixels of an uncompressed 24- or 32-bit BMP, as cells.sh writes it, top
+// row first; transparent pixels go on white.
+function readBmp(bytes: Uint8Array) {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  if (view.getUint16(0) !== 0x424d) {
+    throw new Error('not a BMP')
+  }
+  const start = view.getUint32(10, true)
+  const header = view.getUint32(14, true)
+  const width = view.getInt32(18, true)
+  const tall = view.getInt32(22, true)
+  const bits = view.getUint16(28, true)
+  if (bits !== 24 && bits !== 32) {
+    throw new Error(`a ${bits}-bit BMP`)
+  }
+  // 32-bit pixels say where each channel is; 24-bit ones are blue, green, red.
+  const masks = bits === 32 && header >= 56 && view.getUint32(30, true) === 3
+    ? [0, 4, 8, 12].map(at => view.getUint32(54 + at, true))
+    : [0xff0000, 0xff00, 0xff, bits === 32 ? 0xff000000 : 0]
+  const channel = (value: number, mask: number) =>
+    mask === 0 ? 255 : (((value & mask) >>> 0) / mask) * 255
+  const height = Math.abs(tall)
+  const stride = Math.ceil((width * bits) / 32) * 4
+  const at = (x: number, y: number): Rgb => {
+    const row = tall < 0 ? y : height - 1 - y
+    const offset = start + row * stride + x * (bits / 8)
+    const value = bits === 32
+      ? view.getUint32(offset, true)
+      : view.getUint8(offset) | (view.getUint8(offset + 1) << 8) | (view.getUint8(offset + 2) << 16)
+    const alpha = masks[3] === 0 ? 1 : channel(value, masks[3]!) / 255
+    const blend = (mask: number) => Math.round(channel(value, mask) * alpha + 255 * (1 - alpha))
+
+    return [blend(masks[0]!), blend(masks[1]!), blend(masks[2]!)]
+  }
+
+  return { width, height, at }
+}
+
+// One cell from its four pixels: the split into two colours that strays least.
+function quadrant(pixels: Rgb[]): [number, number, number] {
+  const pack = ([r, g, b]: Rgb) => (r << 16) | (g << 8) | b
+  let best = { error: Number.POSITIVE_INFINITY, mask: 15, fg: pixels[0]!, bg: pixels[0]! }
+  // A split and its complement are one split; bit 3 stays background.
+  for (let mask = 0; mask < 8; mask++) {
+    const groups: [Rgb[], Rgb[]] = [[], []]
+    pixels.forEach((pixel, i) => groups[(mask >> i) & 1 ? 0 : 1].push(pixel))
+    const mean = (group: Rgb[]): Rgb =>
+      [0, 1, 2].map(c => group.reduce((sum, p) => sum + p[c]!, 0) / Math.max(1, group.length)) as Rgb
+    const fg = mean(groups[0])
+    const bg = mean(groups[1])
+    let error = 0
+    pixels.forEach((pixel, i) => {
+      const centre = (mask >> i) & 1 ? fg : bg
+      error += pixel.reduce((sum, v, c) => sum + (v - centre[c]!) ** 2, 0)
+    })
+    if (error < best.error) {
+      best = { error, mask: mask === 0 ? 15 : mask, fg: mask === 0 ? bg : fg, bg }
+    }
+  }
+  const round = (rgb: Rgb) => rgb.map(Math.round) as Rgb
+
+  return [QUADRANTS.codePointAt(best.mask)!, pack(round(best.fg)), pack(round(best.bg))]
+}
+
+// A Raster's cells for a page in a box of columns by rows.
+async function blockCells($: EngineInterface, png: string, columns: number, rows: number) {
+  const key = `${png}\t${columns}x${rows}`
+  const known = cellsOf.get(key)
+  if (known !== undefined) {
+    return known
+  }
+  const ran = await $.process.run(
+    ['/bin/sh', `${$.plugin.root}/scripts/cells.sh`, png, String(columns * 2), String(rows * 2)],
+    { timeoutMs: 30_000 },
+  )
+  if (ran.exitCode !== 0) {
+    throw new Error(ran.stderr.trim() || `cells.sh exited ${ran.exitCode}`)
+  }
+  const bmp = readBmp(Uint8Array.fromBase64((await $.fs.read(ran.stdout.trim(), { as: 'bytes' })).base64))
+  const out = new DataView(new ArrayBuffer(columns * rows * 12))
+  for (let row = 0; row < rows; row++) {
+    for (let column = 0; column < columns; column++) {
+      const x = Math.min(column * 2, bmp.width - 2)
+      const y = Math.min(row * 2, bmp.height - 2)
+      const cell = quadrant([bmp.at(x, y), bmp.at(x + 1, y), bmp.at(x, y + 1), bmp.at(x + 1, y + 1)])
+      cell.forEach((word, i) => out.setUint32((row * columns + column) * 12 + i * 4, word, true))
+    }
+  }
+  const cells = new Uint8Array(out.buffer).toBase64()
+  cellsOf.set(key, cells)
+  const oldest = cellsOf.keys().next().value
+  if (cellsOf.size > 64 && oldest !== undefined) {
+    cellsOf.delete(oldest)
+  }
+
+  return cells
+}
+
+// Whether pictures go out as block characters: the probe found the terminal
+// can't draw them.
+function isBlocks() {
+  return probe.blocked !== undefined
+}
+
 type Draw = { key: string; png: string; columns: number; rows: number; alt: string }
 
+// The picture, or null on another surface, or where blocks were wanted and
+// could not be made (no converter).
 async function picture($: EngineInterface, e: Parameters<EngineInterface['ui']['resolve']>[0], draw: Draw) {
   if (e.surface !== 'terminal') {
     return null
   }
-  const { Image } = $.ui.resolve(e)
+  const { Image, Raster } = $.ui.resolve(e)
+  if (isBlocks()) {
+    const cells = await blockCells($, draw.png, draw.columns, draw.rows).catch(() => undefined)
+
+    return cells === undefined ? null : <Raster key={draw.key} columns={draw.columns} rows={draw.rows} cells={cells} />
+  }
 
   return (
     <Image key={draw.key} source={await imageSource($, draw.png)} columns={draw.columns} rows={draw.rows} alt={draw.alt} />
+  )
+}
+
+// What a click on a picture opens, by the drawing and the click layer's key:
+// the layer's message names no path, so nothing it sends picks the file.
+const clickTargets = new Map<string, string>()
+
+// A picture under a layer that opens `source` in its own app when clicked.
+function clickable(
+  { Box, Client }: Elements['terminal'],
+  requestId: string,
+  key: string,
+  node: ReturnType<Elements['terminal']['Box']>,
+  box: { columns: number; rows: number },
+  source: string,
+) {
+  const layer = `click:${key}`
+  clickTargets.set(`${requestId}\u0000${layer}`, source)
+  if (clickTargets.size > 500) {
+    clickTargets.delete(clickTargets.keys().next().value!)
+  }
+
+  // The layer comes first: drawn after a Raster, its empty box would paint over it.
+  return (
+    <Box key={`wrap:${key}`} width={box.columns} height={box.rows}>
+      <Box position="absolute" top={0} left={0} width={box.columns} height={box.rows}>
+        <Client key={layer} module="./click.tsx" width={box.columns} height={box.rows} />
+      </Box>
+      {node}
+    </Box>
   )
 }
 
@@ -647,8 +797,8 @@ export const register: Register = (on, options: PluginOptions) => {
     if (probe.blocked !== undefined) {
       return {
         result:
-          `Not shown: ${probe.blocked.why} The user sees a notice saying so, with a button to open ` +
-          `${input.path}${where} in their default app. If what it shows matters, describe it in words.`,
+          `Shown to the user${how} as a rough preview in coloured block characters: ${input.path}${where}. ` +
+          `${probe.blocked.why} Fine detail and small text are lost, so if they matter, describe them in words.`,
       }
     }
     return { result: `Shown to the user${how}: ${input.path}${where}.${note}` }
@@ -752,15 +902,23 @@ export const register: Register = (on, options: PluginOptions) => {
       )
     }
 
-    if (probe.blocked !== undefined) {
-      return blockedNotice($, $.ui.resolve(e), value, probe.blocked, false)
-    }
-
     const columns = (e.viewport?.columns ?? 100) - 10
     const box = boxFor(value, columns, value.size === 'small' ? 16 : 36, WIDTH[value.size ?? 'medium'])
+    const shown = await picture($, e, {
+      key: 'pic',
+      png: value.png,
+      ...box,
+      alt: `[${formatOf(value.source)}: ${nameOf(value.source)}${pageLabel(value)}. This terminal cannot draw images; try Ghostty or kitty]`,
+    })
+    if (probe.blocked !== undefined && shown === null) {
+      return blockedNotice($, $.ui.resolve(e), value, probe.blocked, false)
+    }
     const cardWidth = Math.max(box.columns, 34) + 4
     const isPaged = value.pages > 1
-    ensureAnimation($, id, 'pic', value.frames, INLINE_LOOPS, started)
+    const isAnimated = value.frames !== undefined && !isBlocks()
+    if (isAnimated) {
+      ensureAnimation($, id, 'pic', value.frames, INLINE_LOOPS, started)
+    }
 
     return (
       <Box flexDirection="column" borderStyle="round" borderColor="subtle" paddingX={1} width={cardWidth}>
@@ -772,17 +930,13 @@ export const register: Register = (on, options: PluginOptions) => {
         </Box>
         {value.caption && <Text dimColor italic wrap="truncate-end">{value.caption}</Text>}
         <Box justifyContent="center">
-          {await picture($, e, {
-            key: 'pic',
-            png: value.png,
-            ...box,
-            alt: `[${formatOf(value.source)}: ${nameOf(value.source)}${pageLabel(value)}. This terminal cannot draw images; try Ghostty or kitty]`,
-          })}
+          {shown && clickable($.ui.resolve(e), id, 'pic', shown, box, value.source)}
         </Box>
+        {probe.blocked && <Text dimColor wrap="wrap">Block preview: {probe.blocked.why} {probe.blocked.fix}</Text>}
         <Box flexDirection="row" gap={2}>
           {isPaged && <Button key="prev" label="◀" plain dimColor onPress={() => turnInline($, id, value, value.page - 1)} />}
           {isPaged && <Button key="next" label="▶" plain dimColor onPress={() => turnInline($, id, value, value.page + 1)} />}
-          {value.frames && (
+          {isAnimated && (
             <Button
               key="replay"
               label="↻ replay"
@@ -854,16 +1008,14 @@ export const register: Register = (on, options: PluginOptions) => {
       return <Text dimColor>Nothing open. Use /view &lt;path&gt;.</Text>
     }
     const p = state.preview
-    if (probe.blocked !== undefined) {
-      return blockedNotice($, $.ui.resolve(e), p, probe.blocked, true)
-    }
     const isPaged = p.pages > 1
     // The pane's own frame is the only border; inside it a header row, the
-    // page with its thumbnails, an optional note row and one footer row.
+    // page with its thumbnails, optional note rows and one footer row.
     const room = (e.props.scroll?.bodyRows ?? 0) > 0 ? e.props.scroll.bodyRows : Math.max(12, (e.viewport?.rows ?? 30) - 10)
     const inner = Math.max(20, e.props.bodyColumns - 2)
-    // The note wraps rather than losing its end ("install LibreOffice…").
-    const noteRows = p.note ? Math.ceil((p.note.length + 2) / inner) : 0
+    // The notes wrap rather than losing their end ("install LibreOffice…").
+    const blocksNote = probe.blocked ? `Block preview: ${probe.blocked.why} ${probe.blocked.fix}` : undefined
+    const noteRows = [p.note, blocksNote].reduce((sum, note) => sum + (note ? Math.ceil((note.length + 2) / inner) : 0), 0)
     const bodyRows = Math.max(6, room - 4 - noteRows)
     const thumbs = state.thumbs ?? []
     const count = Math.max(1, thumbs.length)
@@ -895,9 +1047,13 @@ export const register: Register = (on, options: PluginOptions) => {
     const pageButton = (page: number, isCurrent: boolean) => (
       <Button key={`thumb:${page}`} label={`${page}`} plain dimColor={!isCurrent} onPress={() => go(page)} />
     )
+    const pagePicture = await picture($, e, { key: 'page', png: p.png, ...box, alt: `[${nameOf(p.source)}${pageLabel(p)}]` })
+    if (probe.blocked !== undefined && pagePicture === null) {
+      return blockedNotice($, $.ui.resolve(e), p, probe.blocked, true)
+    }
     const page = (
       <Box flexDirection="column" flexGrow={isStrip ? 0 : 1} alignItems="center" justifyContent="center" height={isStrip ? box.rows : pageRows}>
-        {await picture($, e, { key: 'page', png: p.png, ...box, alt: `[${nameOf(p.source)}${pageLabel(p)}]` })}
+        {pagePicture && clickable($.ui.resolve(e), PANE, 'page', pagePicture, box, p.source)}
       </Box>
     )
     // Footer: the buttons always, then as much of the key hint as fits. The
@@ -911,7 +1067,9 @@ export const register: Register = (on, options: PluginOptions) => {
         break
       }
     }
-    ensureAnimation($, PANE, 'page', p.frames, Number.POSITIVE_INFINITY, started)
+    if (!isBlocks()) {
+      ensureAnimation($, PANE, 'page', p.frames, Number.POSITIVE_INFINITY, started)
+    }
 
     return (
       <Box flexDirection="column" paddingX={1}>
@@ -967,6 +1125,7 @@ export const register: Register = (on, options: PluginOptions) => {
           </Box>
         )}
         {p.note && <Text dimColor italic>ⓘ {p.note}</Text>}
+        {blocksNote && <Text dimColor italic>ⓘ {blocksNote}</Text>}
         <Box flexDirection="row" justifyContent="space-between" gap={2} marginTop={1}>
           <Box flexDirection="row" gap={2}>
             {isPaged && <Button key="prev" label="prev" hotkey="p" plain dimColor onPress={() => go(p.page - 1)} />}
@@ -977,6 +1136,16 @@ export const register: Register = (on, options: PluginOptions) => {
         </Box>
       </Box>
     )
+  })
+
+  // A click on a picture opens its file in the file's own app.
+  on('ui.message', async ($, e, next) => {
+    const source = clickTargets.get(`${e.requestId}\u0000${e.element}`)
+    if ((e.data as { open?: unknown } | undefined)?.open === true && source !== undefined) {
+      openExternally($, source)
+    }
+
+    return next(e)
   })
 
   on('session.end', ($, e, next) => {

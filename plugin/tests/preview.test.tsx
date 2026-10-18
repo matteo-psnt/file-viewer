@@ -505,3 +505,23 @@ test('Terminal.app is named from the newer refusal', async ($, on) => {
   const ran = await $.tool.call(pngTool('t1'))
   expect(ran.result).toContain("Terminal.app doesn't support kitty graphics")
 })
+
+test("the card keeps the picture's shape in the terminal's measured cells", async ($, on) => {
+  mock.store(on)
+  mock.env(on, { TERM_PROGRAM: 'ghostty' })
+  on('fs.exists', () => ({ value: true }))
+  const clock = mock.clock(on)
+  on('process.run', (_$, e) =>
+    e.argv[1]?.endsWith('cell.sh') ? ok('50 100 800 1200\n') : ok('/c/p.png\t1000\t750\t1\t1\t/a/p.png\t-\t-\n'),
+  )
+
+  await $.tool.call(pngTool('c1'))
+  const ui = await $.ui.mount({
+    plugin: 'file-viewer', surface: 'terminal', component: 'ToolResult', requestId: 'c1', props: result('c1', ''),
+  })
+  // Before the measure, cells are taken as twice as tall as wide.
+  expect((await ui.find({ key: 'pic' }))?.props).toMatchObject({ columns: 64, rows: 24 })
+  // 8 px by 24 px cells: three times as tall, so a third as many rows per column.
+  await clock.advance(10)
+  expect((await ui.find({ key: 'pic' }))?.props).toMatchObject({ columns: 64, rows: 16 })
+})

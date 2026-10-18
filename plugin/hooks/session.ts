@@ -68,3 +68,7 @@ export const rerendering = new Set<string>()
 
 // Deliveries being rendered, and overlay records already written.
 export const delivering = new Set<string>()
+
+// A cell's height over its width, and the column count it was measured at: a
+// font zoom changes the columns, so a new count measures again.
+export const cell: { ratio: number; measuredAt?: number; isMeasuring: boolean } = { ratio: 2, isMeasuring: false }

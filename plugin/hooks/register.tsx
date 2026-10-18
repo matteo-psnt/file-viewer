@@ -19,10 +19,11 @@ import {
   WIDTH,
   type ImagePreview,
 } from './files.ts'
-import { boxFor, footerHints, sidebarPages } from './layout.ts'
+import { boxFor, cellRatioOf, footerHints, sidebarPages } from './layout.ts'
 import {
   animations,
   bytesOf,
+  cell,
   cellsOf,
   clickTargets,
   delivering,
@@ -162,6 +163,34 @@ async function preview($: EngineInterface, source: string, page: number): Promis
     $.ui.status(undefined)
   }
 }
+// Measures the cell's shape, outside the draw, when the column count is new
+// (or, where the draw doesn't say, once); a changed shape draws the pictures
+// again.
+function measureCell($: EngineInterface, viewportColumns: number | undefined) {
+  const columns = viewportColumns ?? 0
+  if (columns === cell.measuredAt || cell.isMeasuring) {
+    return
+  }
+  cell.isMeasuring = true
+  $.clock.after(0, () => {
+    void $.process
+      .run(['/bin/sh', `${$.plugin.root}/scripts/cell.sh`], { timeoutMs: 5000 })
+      .then(ran => {
+        cell.measuredAt = columns
+        const ratio = cellRatioOf(ran.stdout) ?? 2
+        if (Math.abs(ratio - cell.ratio) > 0.02) {
+          cell.ratio = ratio
+          cellsOf.clear()
+          $.ui.invalidate('ui.render')
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        cell.isMeasuring = false
+      })
+  })
+}
+
 function restore($: EngineInterface, id: string, value: ImagePreview) {
   if (rerendering.has(id)) {
     return
@@ -528,6 +557,7 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
     )
   }
   const { Box, Text, Button } = $.ui.resolve(e)
+  measureCell($, e.viewport?.columns)
   const state: Viewer | null = await getViewer($)
   if (state === null) {
     return <Text dimColor>Nothing open. Use /view &lt;path&gt;.</Text>
@@ -555,11 +585,11 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
     : Math.max(2, Math.floor((bodyRows - (count - 1)) / count))
   const sideWidth = isPaged && !isStrip ? 2 + 1 + 1 + thumbColumns : 0
   const pageRows = isStrip ? bodyRows - thumbRows - 3 : bodyRows
-  const box = boxFor(p, inner - sideWidth - (sideWidth > 0 ? 2 : 0), pageRows, 255)
+  const box = boxFor(p, inner - sideWidth - (sideWidth > 0 ? 2 : 0), pageRows, 255, cell.ratio)
   const thumbPictures = new Map(
     await Promise.all(
       thumbs.map(async t => {
-        const size = boxFor(t, thumbColumns, thumbRows, thumbColumns)
+        const size = boxFor(t, thumbColumns, thumbRows, thumbColumns, cell.ratio)
 
         return [
           t.page,
@@ -695,6 +725,7 @@ async function previewCard($: EngineInterface, e: RenderInput<'ToolResult'>, id:
     )
   }
   const { Box, Text, Button, Image } = $.ui.resolve(e)
+  measureCell($, e.viewport?.columns)
   if (value.kind === 'image' && !(await $.fs.exists(value.png))) {
     restore($, id, value)
 
@@ -715,7 +746,7 @@ async function previewCard($: EngineInterface, e: RenderInput<'ToolResult'>, id:
 
   if (value.isTest) {
     const bytes = (await $.fs.read(value.png, { as: 'bytes' })).base64
-    const cell = boxFor(value, 22, 8, 22)
+    const tile = boxFor(value, 22, 8, 22, cell.ratio)
     const variants = [
       { key: 'A', label: 'A plain · file', framed: false, source: { file: value.png, format: 'png' } as const },
       { key: 'B', label: 'B plain · bytes', framed: false, source: { png: bytes } },
@@ -737,7 +768,7 @@ async function previewCard($: EngineInterface, e: RenderInput<'ToolResult'>, id:
               {...(v.framed ? { borderStyle: 'round', borderColor: 'subtle', paddingX: 1 } : {})}
             >
               <Text dimColor>{v.label}</Text>
-              <Image key={`img${v.key}`} source={v.source} columns={cell.columns} rows={cell.rows} alt={`[${v.key}: placeholder]`} />
+              <Image key={`img${v.key}`} source={v.source} columns={tile.columns} rows={tile.rows} alt={`[${v.key}: placeholder]`} />
             </Box>
           ))}
         </Box>
@@ -746,7 +777,7 @@ async function previewCard($: EngineInterface, e: RenderInput<'ToolResult'>, id:
   }
 
   const columns = (e.viewport?.columns ?? 100) - 10
-  const box = boxFor(value, columns, value.size === 'small' ? 16 : 36, WIDTH[value.size ?? 'medium'])
+  const box = boxFor(value, columns, value.size === 'small' ? 16 : 36, WIDTH[value.size ?? 'medium'], cell.ratio)
   const shown = await picture($, e, {
     key: `${at}pic`,
     png: value.png,
@@ -831,6 +862,7 @@ export const register: Register = (on, options: PluginOptions) => {
   link.setting = options.transport ?? 'auto'
   overlay.state = 'off'
   Object.assign(probe, { phase: 'idle', bandId: undefined, verdict: undefined, blocked: undefined })
+  Object.assign(cell, { ratio: 2, measuredAt: undefined, isMeasuring: false })
   started.clear()
 
   on('session.start', async ($, e, next) => {

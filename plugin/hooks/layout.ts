@@ -1,12 +1,14 @@
-// Terminal cells are about twice as tall as wide, so halve the row count.
+// The box of cells a picture takes. `cellRatio` is a cell's height over its
+// width: about 2 in most fonts, measured where the terminal says (cellRatioOf).
 export function boxFor(
   size: { width: number; height: number },
   columnsAvailable: number,
   maxRows: number,
   width: number,
+  cellRatio = 2,
 ) {
   let columns = Math.max(1, Math.min(width, columnsAvailable, 255))
-  let rows = Math.round((columns * size.height) / size.width / 2)
+  let rows = Math.round((columns * size.height) / size.width / cellRatio)
   if (rows > maxRows) {
     columns = Math.max(1, Math.round((columns * maxRows) / rows))
     rows = maxRows
@@ -30,4 +32,17 @@ export function footerHints(isFocused: boolean, isPaged: boolean) {
   }
 
   return [isPaged ? '↑↓ pages · esc close' : '', 'esc close']
+}
+
+// A cell's height over its width from the terminal's size in cells and pixels
+// (cell.sh), or undefined when it doesn't say. Real fonts fall between 1.25 and
+// 3.4; outside that the report is wrong (tmux, ssh), so it's not used.
+export function cellRatioOf(report: string) {
+  const [rows = 0, columns = 0, width = 0, height = 0] = report.trim().split(/\s+/).map(Number)
+  if (!(rows > 0 && columns > 0 && width > 0 && height > 0)) {
+    return undefined
+  }
+  const ratio = height / rows / (width / columns)
+
+  return ratio >= 1.25 && ratio <= 3.4 ? ratio : undefined
 }

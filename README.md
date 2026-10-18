@@ -34,7 +34,7 @@ sudo apt install libreoffice-writer libreoffice-impress libreoffice-calc libreof
 
 LibreOffice is only for Word, PowerPoint and Excel. Without it, macOS falls back to Quick Look, which gets every page but only roughly the right layout, and Linux can't open them at all.
 
-`sh scripts/doctor.sh`, run from the plugin's folder, tells you what's missing and whether your terminal can show pictures.
+`sh scripts/doctor.sh`, run from the plugin's folder (`plugin/` in this repo), tells you what's missing and whether your terminal can show pictures.
 
 ## Terminals
 
@@ -67,7 +67,7 @@ iTerm2 can show the real picture without the env setting above, through iTerm2's
 2. In iTerm2, turn on **Settings > General > Magic > Enable Python API**.
 3. Start a new Claude Code session.
 
-The helper runs only in iTerm2, only while pictures would otherwise be blocks, and stops with the session. If it can't start, previews stay blocks and Claude Code's debug log says why. To see each draw it makes, start `claude` with `FILE_VIEWER_DEBUG=/tmp/overlay.log`. It's ported from [inline-images](https://github.com/chrisns/claude-image-cli-mod); see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+The helper runs only in iTerm2, only while pictures would otherwise be blocks, and stops with the session. If it can't start, previews stay blocks and Claude Code's debug log says why. To see each draw it makes, start `claude` with `FILE_VIEWER_DEBUG=/tmp/overlay.log`. It's ported from [inline-images](https://github.com/chrisns/claude-image-cli-mod); see [THIRD_PARTY_NOTICES.md](plugin/THIRD_PARTY_NOTICES.md).
 
 If you've set `CLAUDE_CODE_FORCE_TERMINAL_IMAGES` and a terminal you also use can't draw pictures, Claude Code sends them anyway and you get blank cards or stray characters. Leave the setting out to get blocks there.
 

@@ -3,7 +3,7 @@
 Ported from inline-images (https://github.com/chrisns/claude-image-cli-mod),
 MIT License, Copyright (c) 2026 Chris Nesbitt-Smith. See THIRD_PARTY_NOTICES.md.
 
-Run with: python3 -m unittest discover -s tests -p 'test_*.py'
+Run with: python3 -m unittest discover -s plugin/tests -p 'test_*.py'
 """
 
 import asyncio
@@ -22,7 +22,7 @@ SCRIPTS = os.path.join(os.path.dirname(__file__), "..", "scripts")
 
 
 def marker_glyphs(marker, row):
-    """The five glyphs of one row's marker, as markerGlyphs in hooks/register.tsx draws them."""
+    """The five glyphs of one row's marker, as markerGlyphs in hooks/blocks.ts draws them."""
     row &= 0xFF
     shuffled = [(byte + row * 37 + index * 11) & 0xFF for index, byte in enumerate(marker, start=1)]
     check = (marker[0] + marker[1] + marker[2] + row * 37 + 0x5A) & 0xFF

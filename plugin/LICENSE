@@ -1,13 +1,6 @@
-# Third-party notices
-
-## inline-images
-
-`scripts/iterm_overlay.py` is ported from `mod/bin/iterm_overlay.py` in [inline-images](https://github.com/chrisns/claude-image-cli-mod). The marker scheme in `hooks/register.tsx` and the click layer in `hooks/click.tsx` follow the same project. Its license:
-
-```
 MIT License
 
-Copyright (c) 2026 Chris Nesbitt-Smith
+Copyright (c) 2026 Matteo Pesenti
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -26,4 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-```

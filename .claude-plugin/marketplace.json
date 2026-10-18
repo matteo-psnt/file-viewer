@@ -7,7 +7,7 @@
   "plugins": [
     {
       "name": "file-viewer",
-      "source": "./",
+      "source": "./plugin",
       "description": "Inline previews of PDFs, Office files, images and animated GIFs, with a paging viewer"
     }
   ]

@@ -10,45 +10,52 @@ jobs:
     name: Validate and test the plugin
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
       # Pinned: the function-hooks API is early access and changes between releases.
       - run: npm install -g @anthropic-ai/claude-code@2.1.295
       - run: claude plugin validate .
-      - run: claude plugin test .
+      - run: claude plugin validate plugin
+      - run: claude plugin test plugin
+      # Claude Code writes the plugin API's types beside a plugin when a session
+      # loads it. A session with a placeholder key loads it, then stops at its
+      # first request.
+      - run: ANTHROPIC_API_KEY=placeholder claude -p --plugin-dir ./plugin hi || true
+      - run: test -f plugin/.claude-plugin/types/claude-code/index.d.ts
+      - run: npx -y -p typescript@7.0.2 tsc -p plugin
 
   overlay:
     name: iTerm2 overlay
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - run: python3 -m unittest discover -s tests -p 'test_*.py'
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - run: python3 -m unittest discover -s plugin/tests -p 'test_*.py'
 
   shell:
     name: Shellcheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - run: shellcheck -s sh scripts/*.sh tests/converter.sh demo/record.sh .githooks/commit-msg
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - run: shellcheck -s sh plugin/scripts/*.sh plugin/tests/converter.sh demo/record.sh .githooks/commit-msg
 
   converter-linux:
     name: Converter on Linux
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq --no-install-recommends \
             poppler-utils librsvg2-bin imagemagick libheif1 libheif-plugin-libde265 unzip \
             libreoffice-writer libreoffice-math
-      - run: sh tests/converter.sh
+      - run: sh plugin/tests/converter.sh
 
   converter-macos:
     name: Converter on macOS
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - run: brew install poppler librsvg imagemagick
-      - run: sh tests/converter.sh
+      - run: sh plugin/tests/converter.sh

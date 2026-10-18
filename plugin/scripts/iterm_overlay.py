@@ -7,7 +7,7 @@ Copyright (c) 2026 Chris Nesbitt-Smith. See THIRD_PARTY_NOTICES.md.
 
 Claude Code owns the screen, so a plugin cannot print a picture itself. In
 iTerm2 the plugin draws its block preview with a hidden marker at the start of
-every row (see markerGlyphs in hooks/register.tsx): the box's id and the
+every row (see markerGlyphs in hooks/blocks.ts): the box's id and the
 row's number. This
 daemon watches one iTerm2 session through the iTerm2 Python API and draws the
 real image over each box it finds, with the iTerm2 inline images protocol, as

@@ -380,3 +380,50 @@ test('the desktop card turns pages', async ($, on) => {
   await ui.press({ key: 'next' })
   expect(await ui.find({ type: 'Text', text: /page 4\/12/ })).toBeDefined()
 })
+
+const delivery = (id: string, output: unknown) => ({ tool_use_id: id, tool: 'SendUserFile', output, isErrored: false })
+
+// Claude Code's own row for a delivery, which the cards go under.
+function coreRow(on: Parameters<TestBody>[1]) {
+  on('ui.render', ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text>sent</Text>
+  })
+}
+
+test('a file Claude sends shows its first page under the delivery', async ($, on) => {
+  mock.store(on)
+  mock.env(on, { TERM_PROGRAM: 'ghostty' })
+  on('fs.exists', () => ({ value: true }))
+  const clock = mock.clock(on)
+  on('process.run', () => ok('/c/r1.png\t800\t1000\t3\t1\t/a/report.pdf\t-\t-\n'))
+  coreRow(on)
+
+  const ui = await $.ui.mount({
+    plugin: 'file-viewer', surface: 'terminal', component: 'ToolResult', requestId: 'u1',
+    props: delivery('u1', { attachments: [{ path: '/a/report.pdf', size: 1, isImage: false }, { path: '/a/notes.md', size: 1, isImage: false }] }),
+  })
+  expect(await ui.find({ type: 'Text', text: /Preparing preview of report\.pdf/ })).toBeDefined()
+  await clock.advance(10)
+  expect((await ui.find({ key: 'f0:pic' }))?.props).toMatchObject({ source: { file: '/c/r1.png' } })
+  expect(await ui.find({ key: 'f1:pic' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /1 \/ 3/ })).toBeDefined()
+})
+
+test('a file sent as a download only gets no preview', async ($, on) => {
+  mock.store(on)
+  on('fs.exists', () => ({ value: true }))
+  const runs: string[][] = []
+  on('process.run', (_$, e) => {
+    runs.push([...e.argv])
+    return ok('/c/r1.png\t800\t1000\t1\t1\t/a/report.pdf\t-\t-\n')
+  })
+  coreRow(on)
+
+  const ui = await $.ui.mount({
+    plugin: 'file-viewer', surface: 'terminal', component: 'ToolResult', requestId: 'u2',
+    props: delivery('u2', { display: 'attach', attachments: [{ path: '/a/report.pdf', size: 1, isImage: false }] }),
+  })
+  expect(await ui.find({ type: 'Text', text: /Preparing preview/ })).toBeUndefined()
+  expect(runs).toEqual([])
+})

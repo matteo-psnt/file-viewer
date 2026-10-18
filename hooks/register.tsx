@@ -1,4 +1,4 @@
-import type { Elements, EngineInterface, ImageSource, PluginOptions, Register, Timer } from 'claude-code'
+import type { Elements, EngineInterface, ImageSource, PluginOptions, Register, RenderInput, Timer } from 'claude-code'
 
 import type { Frame, Preview, Size, Thumb, Viewer } from '../types'
 
@@ -700,6 +700,188 @@ function unsupportedText(value: Extract<Preview, { kind: 'unsupported' }>) {
   return `Can't preview ${nameOf(value.source)}: ${value.reason}. Supported: ${SUPPORTED}.`
 }
 
+// A preview's card: the picture with its name and buttons, or a notice. `id`
+// is where the preview is remembered; `at` prefixes the keys, so one result
+// can hold several cards. Null leaves the result as Claude Code draws it.
+async function previewCard($: EngineInterface, e: RenderInput<'ToolResult'>, id: string, value: Preview, at = '') {
+  if (e.surface !== 'terminal') {
+    if (value.kind !== 'image' || !(await $.fs.exists(value.png))) {
+      return null
+    }
+    const { Box, Text, Svg, Button } = $.ui.resolve(e)
+    const isPaged = value.pages > 1
+
+    return (
+      <Box flexDirection="column" gap={1}>
+        <Text>
+          <Text bold>{formatOf(value.source)}</Text> {nameOf(value.source)}
+          {pageLabel(value)}
+        </Text>
+        {value.caption && <Text dimColor italic>{value.caption}</Text>}
+        <Svg
+          source={await remoteSvg($, value)}
+          alt={`${nameOf(value.source)}${pageLabel(value)}`}
+          width={Math.min(640, value.width)}
+        />
+        <Box flexDirection="row" gap={2}>
+          {isPaged && <Button key={`${at}prev`} label="◀ prev" onPress={() => turnInline($, id, value, value.page - 1)} />}
+          {isPaged && <Button key={`${at}next`} label="next ▶" onPress={() => turnInline($, id, value, value.page + 1)} />}
+          <Button key={`${at}open`} label="open in app" onPress={() => openExternally($, value.source)} />
+        </Box>
+      </Box>
+    )
+  }
+  const { Box, Text, Button, Image } = $.ui.resolve(e)
+  if (value.kind === 'image' && !(await $.fs.exists(value.png))) {
+    restore($, id, value)
+
+    return <Text dimColor>Preparing preview of {nameOf(value.source)}…</Text>
+  }
+
+  if (value.kind === 'unsupported') {
+    return (
+      <Box flexDirection="column" borderStyle="round" borderColor="warning" paddingX={1}>
+        <Text>
+          <Text color="warning" bold>Can't preview</Text> {nameOf(value.source)}
+        </Text>
+        <Text dimColor>{value.reason}</Text>
+        <Text dimColor>Supported: {SUPPORTED}</Text>
+      </Box>
+    )
+  }
+
+  if (value.isTest) {
+    const bytes = (await $.fs.read(value.png, { as: 'bytes' })).base64
+    const cell = boxFor(value, 22, 8, 22)
+    const variants = [
+      { key: 'A', label: 'A plain · file', framed: false, source: { file: value.png, format: 'png' } as const },
+      { key: 'B', label: 'B plain · bytes', framed: false, source: { png: bytes } },
+      { key: 'C', label: 'C card · file', framed: true, source: { file: value.png, format: 'png' } as const },
+      { key: 'D', label: 'D card · bytes', framed: true, source: { png: bytes } },
+    ]
+
+    return (
+      <Box flexDirection="column">
+        <Text dimColor>
+          file-viewer test · probe: {probe.verdict ?? probe.phase}
+          {probe.blocked ? ` (${probe.blocked.why})` : ''} · transport: {await transportOf($)}
+        </Text>
+        <Box flexDirection="row" gap={2}>
+          {variants.map(v => (
+            <Box
+              key={`v${v.key}`}
+              flexDirection="column"
+              {...(v.framed ? { borderStyle: 'round', borderColor: 'subtle', paddingX: 1 } : {})}
+            >
+              <Text dimColor>{v.label}</Text>
+              <Image key={`img${v.key}`} source={v.source} columns={cell.columns} rows={cell.rows} alt={`[${v.key}: placeholder]`} />
+            </Box>
+          ))}
+        </Box>
+      </Box>
+    )
+  }
+
+  const columns = (e.viewport?.columns ?? 100) - 10
+  const box = boxFor(value, columns, value.size === 'small' ? 16 : 36, WIDTH[value.size ?? 'medium'])
+  const shown = await picture($, e, {
+    key: `${at}pic`,
+    png: value.png,
+    ...box,
+    alt: `[${formatOf(value.source)}: ${nameOf(value.source)}${pageLabel(value)}. This terminal cannot draw images; try Ghostty or kitty]`,
+  })
+  if (probe.blocked !== undefined && shown === null) {
+    return blockedNotice($, $.ui.resolve(e), value, probe.blocked, false)
+  }
+  const cardWidth = Math.max(box.columns, 34) + 4
+  const isPaged = value.pages > 1
+  const isAnimated = value.frames !== undefined && !isBlocks()
+  if (isAnimated) {
+    ensureAnimation($, id, `${at}pic`, value.frames, INLINE_LOOPS, started)
+  }
+
+  return (
+    <Box flexDirection="column" borderStyle="round" borderColor="subtle" paddingX={1} width={cardWidth}>
+      <Box flexDirection="row" justifyContent="space-between" gap={1}>
+        <Text wrap="truncate-middle">
+          <Text color="claude" bold>{formatOf(value.source)}</Text> {nameOf(value.source)}
+        </Text>
+        {isPaged && <Text dimColor>{value.page} / {value.pages}</Text>}
+      </Box>
+      {value.caption && <Text dimColor italic wrap="truncate-end">{value.caption}</Text>}
+      <Box justifyContent="center">
+        {shown && clickable($.ui.resolve(e), e.requestId, `${at}pic`, shown, box, value.source)}
+      </Box>
+      {probe.blocked && <Text dimColor wrap="wrap">Block preview: {probe.blocked.why} {probe.blocked.fix}</Text>}
+      <Box flexDirection="row" gap={2}>
+        {isPaged && <Button key={`${at}prev`} label="◀" plain dimColor onPress={() => turnInline($, id, value, value.page - 1)} />}
+        {isPaged && <Button key={`${at}next`} label="▶" plain dimColor onPress={() => turnInline($, id, value, value.page + 1)} />}
+        {isAnimated && (
+          <Button
+            key={`${at}replay`}
+            label="↻ replay"
+            plain
+            dimColor
+            onPress={() => playAnimation($, id, `${at}pic`, value.frames ?? [], INLINE_LOOPS)}
+          />
+        )}
+        <Button key={`${at}viewer`} label="⤢ viewer" plain dimColor onPress={() => openViewer($, value)} />
+        <Button key={`${at}open`} label="↗ open" plain dimColor onPress={() => openExternally($, value.source)} />
+      </Box>
+    </Box>
+  )
+}
+
+// Files Claude hands over with these tools get a card under the delivery, so a
+// PDF or a deck it made shows its first page where it arrives.
+const DELIVERY_TOOLS = new Set(['SendUserFile', 'SendUserMessage'])
+const DELIVERED_MAX = 4
+const PREVIEWABLE =
+  /\.(pdf|docx?|pptx?|xlsx?|rtf|odt|odp|ods|gif|webp|apng|png|jpe?g|heic|heif|avif|tiff?|bmp|psd|tga|ico|icns|jp2|dng|cr2|cr3|nef|arw|raf|orf|rw2|svgz?|key|pages|numbers)$/i
+const delivering = new Set<string>()
+
+function deliveredFiles(output: unknown): string[] {
+  const { display, attachments } = (output ?? {}) as { display?: unknown; attachments?: unknown }
+  // "attach" asks for a download card only.
+  if (display === 'attach' || !Array.isArray(attachments)) {
+    return []
+  }
+
+  return attachments
+    .map(attachment => (attachment as { path?: unknown } | null)?.path)
+    .filter((path): path is string => typeof path === 'string' && PREVIEWABLE.test(path))
+    .slice(0, DELIVERED_MAX)
+}
+
+// A card for each file a delivery holds, or none for a delivery of none.
+async function deliveredCards($: EngineInterface, e: RenderInput<'ToolResult', 'terminal'>) {
+  const files = deliveredFiles(e.props.output)
+  const { Text } = $.ui.resolve(e)
+
+  return Promise.all(
+    files.map(async (path, i) => {
+      const id = `${e.requestId}#${i}`
+      const value = await lookup($, id)
+      if (value === undefined) {
+        // Rendered outside the draw; remembering it draws this row again.
+        if (!delivering.has(id)) {
+          delivering.add(id)
+          $.clock.after(0, () => {
+            void preview($, path, 1)
+              .then(made => remember($, id, made))
+              .finally(() => delivering.delete(id))
+          })
+        }
+
+        return <Text key={`f${i}:wait`} dimColor>Preparing preview of {nameOf(path)}…</Text>
+      }
+
+      // A file that won't preview stays the download it was sent as.
+      return value.kind === 'unsupported' ? null : await previewCard($, e, id, value, `f${i}:`)
+    }),
+  )
+}
+
 export const register: Register = (on, options: PluginOptions) => {
   transport = undefined
   Object.assign(probe, { phase: 'idle', bandId: undefined, verdict: undefined, blocked: undefined })
@@ -815,6 +997,20 @@ export const register: Register = (on, options: PluginOptions) => {
   })
 
   on('ui.render', { component: 'ToolResult' }, async ($, e, next) => {
+    if (!e.props.isErrored && DELIVERY_TOOLS.has(e.props.tool) && e.surface === 'terminal') {
+      const cards = await deliveredCards($, e)
+      if (cards.length === 0) {
+        return next(e)
+      }
+      const { Box } = $.ui.resolve(e)
+
+      return (
+        <Box flexDirection="column">
+          {await next(e)}
+          {cards}
+        </Box>
+      )
+    }
     if (e.props.isErrored || e.props.tool !== FULL_TOOL) {
       return next(e)
     }
@@ -822,134 +1018,7 @@ export const register: Register = (on, options: PluginOptions) => {
     if (value === undefined) {
       return next(e)
     }
-    if (e.surface !== 'terminal') {
-      if (value.kind !== 'image' || !(await $.fs.exists(value.png))) {
-        return next(e)
-      }
-      const { Box, Text, Svg, Button } = $.ui.resolve(e)
-      const id = e.requestId
-      const isPaged = value.pages > 1
-
-      return (
-        <Box flexDirection="column" gap={1}>
-          <Text>
-            <Text bold>{formatOf(value.source)}</Text> {nameOf(value.source)}
-            {pageLabel(value)}
-          </Text>
-          {value.caption && <Text dimColor italic>{value.caption}</Text>}
-          <Svg
-            source={await remoteSvg($, value)}
-            alt={`${nameOf(value.source)}${pageLabel(value)}`}
-            width={Math.min(640, value.width)}
-          />
-          <Box flexDirection="row" gap={2}>
-            {isPaged && <Button key="prev" label="◀ prev" onPress={() => turnInline($, id, value, value.page - 1)} />}
-            {isPaged && <Button key="next" label="next ▶" onPress={() => turnInline($, id, value, value.page + 1)} />}
-            <Button key="open" label="open in app" onPress={() => openExternally($, value.source)} />
-          </Box>
-        </Box>
-      )
-    }
-    const { Box, Text, Button, Image } = $.ui.resolve(e)
-    const id = e.requestId
-    if (value.kind === 'image' && !(await $.fs.exists(value.png))) {
-      restore($, id, value)
-
-      return <Text dimColor>Preparing preview of {nameOf(value.source)}…</Text>
-    }
-
-    if (value.kind === 'unsupported') {
-      return (
-        <Box flexDirection="column" borderStyle="round" borderColor="warning" paddingX={1}>
-          <Text>
-            <Text color="warning" bold>Can't preview</Text> {nameOf(value.source)}
-          </Text>
-          <Text dimColor>{value.reason}</Text>
-          <Text dimColor>Supported: {SUPPORTED}</Text>
-        </Box>
-      )
-    }
-
-    if (value.isTest) {
-      const bytes = (await $.fs.read(value.png, { as: 'bytes' })).base64
-      const cell = boxFor(value, 22, 8, 22)
-      const variants = [
-        { key: 'A', label: 'A plain · file', framed: false, source: { file: value.png, format: 'png' } as const },
-        { key: 'B', label: 'B plain · bytes', framed: false, source: { png: bytes } },
-        { key: 'C', label: 'C card · file', framed: true, source: { file: value.png, format: 'png' } as const },
-        { key: 'D', label: 'D card · bytes', framed: true, source: { png: bytes } },
-      ]
-
-      return (
-        <Box flexDirection="column">
-          <Text dimColor>
-            file-viewer test · probe: {probe.verdict ?? probe.phase}
-            {probe.blocked ? ` (${probe.blocked.why})` : ''} · transport: {await transportOf($)}
-          </Text>
-          <Box flexDirection="row" gap={2}>
-            {variants.map(v => (
-              <Box
-                key={`v${v.key}`}
-                flexDirection="column"
-                {...(v.framed ? { borderStyle: 'round', borderColor: 'subtle', paddingX: 1 } : {})}
-              >
-                <Text dimColor>{v.label}</Text>
-                <Image key={`img${v.key}`} source={v.source} columns={cell.columns} rows={cell.rows} alt={`[${v.key}: placeholder]`} />
-              </Box>
-            ))}
-          </Box>
-        </Box>
-      )
-    }
-
-    const columns = (e.viewport?.columns ?? 100) - 10
-    const box = boxFor(value, columns, value.size === 'small' ? 16 : 36, WIDTH[value.size ?? 'medium'])
-    const shown = await picture($, e, {
-      key: 'pic',
-      png: value.png,
-      ...box,
-      alt: `[${formatOf(value.source)}: ${nameOf(value.source)}${pageLabel(value)}. This terminal cannot draw images; try Ghostty or kitty]`,
-    })
-    if (probe.blocked !== undefined && shown === null) {
-      return blockedNotice($, $.ui.resolve(e), value, probe.blocked, false)
-    }
-    const cardWidth = Math.max(box.columns, 34) + 4
-    const isPaged = value.pages > 1
-    const isAnimated = value.frames !== undefined && !isBlocks()
-    if (isAnimated) {
-      ensureAnimation($, id, 'pic', value.frames, INLINE_LOOPS, started)
-    }
-
-    return (
-      <Box flexDirection="column" borderStyle="round" borderColor="subtle" paddingX={1} width={cardWidth}>
-        <Box flexDirection="row" justifyContent="space-between" gap={1}>
-          <Text wrap="truncate-middle">
-            <Text color="claude" bold>{formatOf(value.source)}</Text> {nameOf(value.source)}
-          </Text>
-          {isPaged && <Text dimColor>{value.page} / {value.pages}</Text>}
-        </Box>
-        {value.caption && <Text dimColor italic wrap="truncate-end">{value.caption}</Text>}
-        <Box justifyContent="center">
-          {shown && clickable($.ui.resolve(e), id, 'pic', shown, box, value.source)}
-        </Box>
-        {probe.blocked && <Text dimColor wrap="wrap">Block preview: {probe.blocked.why} {probe.blocked.fix}</Text>}
-        <Box flexDirection="row" gap={2}>
-          {isPaged && <Button key="prev" label="◀" plain dimColor onPress={() => turnInline($, id, value, value.page - 1)} />}
-          {isPaged && <Button key="next" label="▶" plain dimColor onPress={() => turnInline($, id, value, value.page + 1)} />}
-          {isAnimated && (
-            <Button
-              key="replay"
-              label="↻ replay"
-              plain
-              dimColor
-              onPress={() => playAnimation($, id, 'pic', value.frames ?? [], INLINE_LOOPS)}
-            />
-          )}
-          <Button key="viewer" label="⤢ viewer" plain dimColor onPress={() => openViewer($, value)} />
-          <Button key="open" label="↗ open" plain dimColor onPress={() => openExternally($, value.source)} />
-        </Box>
-      </Box>
-    )
+    return (await previewCard($, e, e.requestId, value)) ?? next(e)
   })
 
   // Arrow keys walk the focus ring over the thumbnails' page buttons; landing

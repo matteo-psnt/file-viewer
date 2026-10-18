@@ -77,6 +77,8 @@ Text files aren't previewed, since Claude Code already shows them.
 
 Ask in plain words, like "show me slide 12 of the lecture" or "open my report in the viewer". Claude also uses it on its own when a picture would help, say after it makes a chart.
 
+When Claude sends you a file, say a report or a deck it just made, its first page shows under the delivery. A file sent as a download only (`display: "attach"`) stays a download.
+
 In the viewer, `↑`/`↓` or `p`/`n` turn pages, `o` opens the file in its own app and `Esc` closes it. The keys work while the viewer has the keyboard; `ctrl+x tab` gives it back after you've typed in the prompt.
 
 Everything runs on your machine, and the plugin never uploads your files. See [PRIVACY.md](PRIVACY.md).

@@ -8,7 +8,7 @@ The files you or Claude ask it to preview, and only when asked. It also reads a 
 
 ## What it stores
 
-Rendered pages of the files it previews, as PNG images in a local cache folder: `~/Library/Caches/claude-file-viewer` on macOS, `~/.cache/claude-file-viewer` on Linux. Anything unused for 30 days is deleted. You can delete the folder at any time.
+Rendered pages of the files it previews, as PNG images in a local cache folder: `~/Library/Caches/claude-file-viewer` on macOS, `~/.cache/claude-file-viewer` on Linux. Only your user can read the folder, and anything unused for 30 days is deleted. You can delete the folder at any time.
 
 It also saves which file and page each preview showed, inside Claude Code's own plugin storage on your machine, so a resumed conversation can draw the preview again.
 

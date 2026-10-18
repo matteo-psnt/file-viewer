@@ -14,7 +14,7 @@ It also saves which file and page each preview showed, inside Claude Code's own 
 
 ## What it runs
 
-Local programs that turn files into pictures: poppler, LibreOffice, ImageMagick or `sips`, `rsvg-convert`, and on macOS without LibreOffice, Quick Look and a headless Chrome. The open button hands the file to your system's default app. None of these are given anything except the file you asked to preview.
+Local programs that turn files into pictures: poppler, LibreOffice, ImageMagick or `sips`, `rsvg-convert`, and on macOS without LibreOffice, Quick Look and a headless Chrome. In iTerm2, if you've installed its `iterm2` Python module and turned on its Python API, a helper reads the text on your Claude Code session's screen through that API, to find where the block previews are, and draws the pictures over them. It reads only that session's screen, keeps nothing, and talks only to iTerm2 on your machine. The open button hands the file to your system's default app. The converters are given nothing except the file you asked to preview.
 
 ## Questions
 

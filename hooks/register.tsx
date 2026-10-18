@@ -266,7 +266,9 @@ function explainDeny(deny: string, termProgram: string | undefined): Blocked {
     return FORCEABLE.test(terminal)
       ? {
           why: `Claude Code only turns pictures on in Ghostty and kitty, and this is ${terminal}.`,
-          fix: `${terminal.split(' ')[0]} can show them. ${FORCE_FIX}`,
+          fix: terminal.startsWith('iTerm2')
+            ? `iTerm2 can show them. ${FORCE_FIX} Or, for this plugin only: python3 -m pip install iterm2, then turn on iTerm2 > Settings > General > Magic > Enable Python API.`
+            : `${terminal.split(' ')[0]} can show them. ${FORCE_FIX}`,
         }
       : { why: `Claude Code only shows pictures in Ghostty and kitty, and this is ${terminal}.`, fix: elsewhere }
   }
@@ -305,6 +307,9 @@ async function runProbe($: EngineInterface, attempt = 0) {
     if (probe.verdict === 'none') {
       const termProgram = await $.env.get('TERM_PROGRAM').catch(() => undefined)
       probe.blocked = explainDeny(byBytes.deny ?? byFile.deny ?? '', termProgram)
+      if (termProgram === 'iTerm.app') {
+        await startOverlay($)
+      }
     }
   }
   probe.phase = 'done'
@@ -426,9 +431,43 @@ function quadrant(pixels: Rgb[]): [number, number, number] {
   return [QUADRANTS.codePointAt(best.mask)!, pack(round(best.fg)), pack(round(best.bg))]
 }
 
+// In iTerm2, scripts/iterm_overlay.py draws the real picture over a block
+// preview. It finds each box by a marker hidden in the first cells of every
+// row: a check glyph, three for the box's id and one for the row, braille
+// because nothing else draws it, in the cell's own colour so it doesn't show.
+// Each glyph mixes in the row, so when a box moves every marker cell changes
+// and Claude Code paints them all again. After inline-images (MIT).
+const MARKER_CELLS = 5
+const BRAILLE_BLANK = 0x2800
+let overlay: 'off' | 'starting' | 'live' | 'failed' = 'off'
+const registered = new Set<string>()
+
+function markerOf(png: string, columns: number, rows: number) {
+  let hash = 0x811c9dc5
+  for (const char of `${png}:${columns}:${rows}`) {
+    hash = Math.imul(hash ^ char.charCodeAt(0), 0x01000193) >>> 0
+  }
+
+  return [hash & 0xff, (hash >>> 8) & 0xff, (hash >>> 16) & 0xff]
+}
+
+function markerGlyphs(marker: number[], row: number) {
+  const r = row & 0xff
+  const shuffled = marker.map((byte, i) => (byte + r * 37 + (i + 1) * 11) & 0xff)
+  const check = (marker[0]! + marker[1]! + marker[2]! + r * 37 + 0x5a) & 0xff
+
+  return [check, ...shuffled, r].map(value => BRAILLE_BLANK + value)
+}
+
+// Whether block previews carry markers: the overlay runs or is starting.
+function isMarked(columns: number) {
+  return (overlay === 'starting' || overlay === 'live') && columns >= MARKER_CELLS
+}
+
 // A Raster's cells for a page in a box of columns by rows.
 async function blockCells($: EngineInterface, png: string, columns: number, rows: number) {
-  const key = `${png}\t${columns}x${rows}`
+  const marker = isMarked(columns) ? markerOf(png, columns, rows) : undefined
+  const key = `${png}\t${columns}x${rows}${marker ? '\tm' : ''}`
   const known = cellsOf.get(key)
   if (known !== undefined) {
     return known
@@ -447,10 +486,17 @@ async function blockCells($: EngineInterface, png: string, columns: number, rows
       const x = Math.min(column * 2, bmp.width - 2)
       const y = Math.min(row * 2, bmp.height - 2)
       const cell = quadrant([bmp.at(x, y), bmp.at(x + 1, y), bmp.at(x, y + 1), bmp.at(x + 1, y + 1)])
+      if (marker !== undefined && column < MARKER_CELLS) {
+        cell[0] = markerGlyphs(marker, row)[column]!
+        cell[1] = cell[2]
+      }
       cell.forEach((word, i) => out.setUint32((row * columns + column) * 12 + i * 4, word, true))
     }
   }
   const cells = new Uint8Array(out.buffer).toBase64()
+  if (marker !== undefined) {
+    await registerOverlay($, png, marker, columns, rows, out)
+  }
   cellsOf.set(key, cells)
   const oldest = cellsOf.keys().next().value
   if (cellsOf.size > 64 && oldest !== undefined) {
@@ -458,6 +504,78 @@ async function blockCells($: EngineInterface, png: string, columns: number, rows
   }
 
   return cells
+}
+
+// What the overlay draws for a marker, and every glyph of the box, so it can
+// tell its box repainted from something else drawn over it. Kept in the
+// cache's overlays folder, which the overlay reads.
+async function registerOverlay(
+  $: EngineInterface,
+  png: string,
+  marker: number[],
+  columns: number,
+  rows: number,
+  cells: DataView,
+) {
+  const hex = marker.map(byte => byte.toString(16).padStart(2, '0')).join('')
+  if (registered.has(hex)) {
+    return
+  }
+  let glyphs = ''
+  for (let at = 0; at < columns * rows; at++) {
+    glyphs += String.fromCodePoint(cells.getUint32(at * 12, true))
+  }
+  const folder = png.slice(0, png.lastIndexOf('/'))
+  await $.fs.write(`${folder}/overlays/${hex}.json`, JSON.stringify({ png, columns, rows, glyphs }))
+  registered.add(hex)
+}
+
+// Starts the iTerm2 overlay for this session's life. It needs the iterm2
+// Python module and iTerm2's Python API; without them the previews stay
+// blocks, and only the debug log says why.
+async function startOverlay($: EngineInterface) {
+  const session = await $.env.get('ITERM_SESSION_ID').catch(() => undefined)
+  if (overlay !== 'off' || session === undefined) {
+    return
+  }
+  overlay = 'starting'
+  $.ui.invalidate('ui.render')
+  void (async () => {
+    let buffer = ''
+    let reason = ''
+    try {
+      for await (const piece of $.process.spawn({ argv: ['python3', `${$.plugin.root}/scripts/iterm_overlay.py`, '--session', session] })) {
+        if (piece.stream === 'stderr') {
+          reason = piece.text.trim().split('\n').pop() ?? reason
+          continue
+        }
+        buffer += piece.text
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+        for (const line of lines) {
+          const message = (() => {
+            try {
+              return JSON.parse(line) as { ready?: boolean; error?: string }
+            } catch {
+              return {}
+            }
+          })()
+          if (message.ready === true) {
+            overlay = 'live'
+            $.ui.invalidate('ui.render')
+          } else if (message.error !== undefined) {
+            reason = message.error
+          }
+        }
+      }
+    } catch (err) {
+      reason = (err as Error).message
+    }
+    overlay = 'failed'
+    cellsOf.clear()
+    $.ui.invalidate('ui.render')
+    $.ui.log(`file-viewer: block previews only in iTerm2: ${reason || 'the overlay stopped'}`, { to: 'debug' })
+  })()
 }
 
 // Whether pictures go out as block characters: the probe found the terminal
@@ -812,7 +930,9 @@ async function previewCard($: EngineInterface, e: RenderInput<'ToolResult'>, id:
       <Box justifyContent="center">
         {shown && clickable($.ui.resolve(e), e.requestId, `${at}pic`, shown, box, value.source)}
       </Box>
-      {probe.blocked && <Text dimColor wrap="wrap">Block preview: {probe.blocked.why} {probe.blocked.fix}</Text>}
+      {probe.blocked && overlay !== 'live' && (
+        <Text dimColor wrap="wrap">Block preview: {probe.blocked.why} {probe.blocked.fix}</Text>
+      )}
       <Box flexDirection="row" gap={2}>
         {isPaged && <Button key={`${at}prev`} label="◀" plain dimColor onPress={() => turnInline($, id, value, value.page - 1)} />}
         {isPaged && <Button key={`${at}next`} label="▶" plain dimColor onPress={() => turnInline($, id, value, value.page + 1)} />}
@@ -884,6 +1004,7 @@ async function deliveredCards($: EngineInterface, e: RenderInput<'ToolResult', '
 
 export const register: Register = (on, options: PluginOptions) => {
   transport = undefined
+  overlay = 'off'
   Object.assign(probe, { phase: 'idle', bandId: undefined, verdict: undefined, blocked: undefined })
   transportSetting = options.transport ?? 'auto'
   started.clear()
@@ -976,7 +1097,7 @@ export const register: Register = (on, options: PluginOptions) => {
     const how = input.mode === 'viewer' ? ' in the viewer pane' : ''
     const note = shown.note ? ` Note: ${shown.note}.` : ''
 
-    if (probe.blocked !== undefined) {
+    if (probe.blocked !== undefined && overlay !== 'live') {
       return {
         result:
           `Shown to the user${how} as a rough preview in coloured block characters: ${input.path}${where}. ` +
@@ -1083,7 +1204,7 @@ export const register: Register = (on, options: PluginOptions) => {
     const room = (e.props.scroll?.bodyRows ?? 0) > 0 ? e.props.scroll.bodyRows : Math.max(12, (e.viewport?.rows ?? 30) - 10)
     const inner = Math.max(20, e.props.bodyColumns - 2)
     // The notes wrap rather than losing their end ("install LibreOffice…").
-    const blocksNote = probe.blocked ? `Block preview: ${probe.blocked.why} ${probe.blocked.fix}` : undefined
+    const blocksNote = probe.blocked && overlay !== 'live' ? `Block preview: ${probe.blocked.why} ${probe.blocked.fix}` : undefined
     const noteRows = [p.note, blocksNote].reduce((sum, note) => sum + (note ? Math.ceil((note.length + 2) / inner) : 0), 0)
     const bodyRows = Math.max(6, room - 4 - noteRows)
     const thumbs = state.thumbs ?? []

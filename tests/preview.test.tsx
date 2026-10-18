@@ -222,10 +222,15 @@ test('a local terminal reads the file by path', async ($, on) => {
 })
 
 // Runs the session-start probe with Claude Code refusing the picture swap.
-async function startRefused(...[$, on, deny]: [...Parameters<TestBody>, string]) {
+async function startRefused(
+  ...[$, on, deny, write]: [...Parameters<TestBody>, string, ((path: string, text: string) => void)?]
+) {
   const clock = mock.clock(on)
   on('ui.blit', () => ({ value: { deny } }))
-  on('fs.write', () => ({ value: undefined }))
+  on('fs.write', (_$, e) => {
+    write?.(e.path, e.text)
+    return { value: undefined }
+  })
   on('session.start', () => ({ cwd: '/a' }))
   on('tool.register', () => ({ value: { tool: 'mcp__file-viewer__preview' } }))
   on('command.register', () => ({ value: { command: 'view' } }))
@@ -426,4 +431,63 @@ test('a file sent as a download only gets no preview', async ($, on) => {
   })
   expect(await ui.find({ type: 'Text', text: /Preparing preview/ })).toBeUndefined()
   expect(runs).toEqual([])
+})
+
+test('in iTerm2 the overlay draws over marked blocks', async ($, on) => {
+  mock.store(on)
+  mock.env(on, { TERM_PROGRAM: 'iTerm.app', ITERM_SESSION_ID: 'w0t0p0:ABC' })
+  on('fs.exists', () => ({ value: true }))
+  let size = [0, 0]
+  on('process.run', (_$, e) => {
+    if (e.argv[1]?.endsWith('cells.sh')) {
+      size = [Number(e.argv[3]), Number(e.argv[4])]
+      return ok('/c/pic-c.bmp\n')
+    }
+    return ok('/c/pic.png\t200\t100\t1\t1\t/a/pic.png\t-\t-\n')
+  })
+  on('fs.read', () => ({ value: { base64: halves(size[0]!, size[1]!) } }))
+  const spawned: string[][] = []
+  let ready = (): void => undefined
+  let stop = (): void => undefined
+  on('process.spawn', async function* (_$, e) {
+    spawned.push([...e.argv])
+    await new Promise<void>(resolve => {
+      ready = resolve
+    })
+    yield { stream: 'stdout' as const, text: '{"ok": true, "ready": true}\n' }
+    await new Promise<void>(resolve => {
+      stop = resolve
+    })
+  })
+  const records = new Map<string, string>()
+  await startRefused(
+    $,
+    on,
+    'the Image draws its alt here: the terminal draws no placeholder images (probe: graphics reply OK, terminal iTerm2 3.7.4)',
+    (path, text) => records.set(path, text),
+  )
+  expect(spawned[0]?.slice(-2)).toEqual(['--session', 'w0t0p0:ABC'])
+
+  const ran = await $.tool.call(pngTool('i1'))
+  const ui = await $.ui.mount({
+    plugin: 'file-viewer', surface: 'terminal', component: 'ToolResult', requestId: 'i1', props: result('i1', ran.result),
+  })
+  const raster = (await ui.find({ key: 'pic' }))?.props as { cells: string }
+  // The first five cells of a row are braille in the cell's own colour.
+  const first = cellAt(raster.cells, 0)
+  expect(first[0]! >= 0x2800 && first[0]! <= 0x28ff).toBe(true)
+  expect(first[1]).toBe(first[2])
+  expect(cellAt(raster.cells, 5)[0]).toBe(0x2588)
+  const [path, text] = [...records.entries()].find(([p]) => p.startsWith('/c/overlays/')) ?? []
+  expect(path).toMatch(/^\/c\/overlays\/[0-9a-f]{6}\.json$/)
+  expect(JSON.parse(text ?? '{}')).toMatchObject({ png: '/c/pic.png', columns: 64, rows: 16 })
+  expect(await ui.find({ type: 'Text', text: /Block preview/ })).toBeDefined()
+
+  // Once the overlay says it's ready, the row redraws without the note.
+  ready()
+  for (let i = 0; i < 10; i++) {
+    await Promise.resolve()
+  }
+  expect(await ui.find({ type: 'Text', text: /Block preview/ })).toBeUndefined()
+  stop()
 })

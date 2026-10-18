@@ -51,12 +51,23 @@ That applies everywhere you run Claude Code, so leave it out if you also use a t
 | Terminal | What you see |
 | --- | --- |
 | Ghostty, kitty 0.28+ | The real picture |
-| iTerm2, Rio, Claude Agents sessions | The real picture with the setting above, blocks without it |
+| iTerm2 | The real picture with the setting above or [the iTerm2 helper](#real-pictures-in-iterm2), blocks without either |
+| Rio, Claude Agents sessions | The real picture with the setting above, blocks without it |
 | Warp, WezTerm, Konsole, VS Code | Blocks. They don't draw the placeholders Claude Code uses |
 | Terminal.app, Alacritty, Windows Terminal, foot | Blocks. No kitty graphics |
 | tmux, screen | Blocks. Claude Code doesn't send pictures through them |
 
 Where pictures can't show, the page is drawn in coloured block characters, four blocks to a character cell, with a line saying why and what would show the real picture. It's rough, but you can tell the slides apart and see the charts. Claude is told you see a block preview, so it describes small text and fine detail in words. The blocks come from ImageMagick, or from `sips` on macOS; with neither, you get a notice with a button to open the file in its own app.
+
+### Real pictures in iTerm2
+
+iTerm2 can show the real picture without the env setting above, through iTerm2's own scripting API: a small Python helper watches the screen and draws each page over its block preview. To turn it on:
+
+1. Run `python3 -m pip install iterm2`. `python3 -m pip install Pillow` too, if you want a page that's partly scrolled off the screen drawn as well.
+2. In iTerm2, turn on **Settings > General > Magic > Enable Python API**.
+3. Start a new Claude Code session.
+
+The helper runs only in iTerm2, only while pictures would otherwise be blocks, and stops with the session. If it can't start, previews stay blocks and Claude Code's debug log says why. To see each draw it makes, start `claude` with `FILE_VIEWER_DEBUG=/tmp/overlay.log`. It's ported from [inline-images](https://github.com/chrisns/claude-image-cli-mod); see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 Click a picture to open the file in its own app. Over ssh and under WSL the plugin sends picture bytes instead of file paths; if that guess is wrong, change "Image transport" in `/config`.
 

@@ -19,6 +19,13 @@ jobs:
       - run: claude plugin validate .
       - run: claude plugin test .
 
+  overlay:
+    name: iTerm2 overlay
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -m unittest discover -s tests -p 'test_*.py'
+
   shell:
     name: Shellcheck
     runs-on: ubuntu-latest

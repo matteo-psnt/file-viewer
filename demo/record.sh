@@ -8,6 +8,7 @@
 #
 #   tools Write              also allow these tools without asking
 #   mode acceptEdits         start in this permission mode (default: default)
+#   blocks                   record the block preview other terminals get
 #   say <text>               type a prompt and press enter
 #   done                     wait until Claude's turn ends
 #   view <path>              run /view <path>
@@ -31,6 +32,8 @@ tools=mcp__file-viewer__preview
 extra=$(sed -n 's/^tools //p' "$scenario" | head -1)
 [ -n "$extra" ] && tools="$tools,$extra"
 mode=$(sed -n 's/^mode //p' "$scenario" | head -1)
+blocks=0
+grep -q '^blocks$' "$scenario" && blocks=1
 
 k() { "$kitty" @ --to "$sock" "$@"; }
 screen() { k get-text --extent all 2>/dev/null || true; }
@@ -40,7 +43,7 @@ turns() { screen | grep -c '· done' || true; }
 env -u CLAUDECODE -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH \
   -u CLAUDE_CODE_MESSAGING_SOCKET -u CLAUDE_CODE_MESSAGING_TOKEN -u CLAUDE_CODE_SESSION_ATTENDED \
   -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_SESSION_KIND -u CLAUDE_EFFORT -u CLAUDE_JOB_DIR -u CLAUDE_PID \
-  DISABLE_AUTOUPDATER=1 \
+  DISABLE_AUTOUPDATER=1 FILE_VIEWER_BLOCKS=$blocks \
   "$kitty" -o allow_remote_control=socket-only --listen-on "$sock" \
   -o hide_window_decorations=titlebar-only -o remember_window_size=no \
   -o initial_window_width=118c -o initial_window_height=40c -o font_size=15 \

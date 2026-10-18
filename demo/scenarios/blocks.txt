@@ -1,0 +1,5 @@
+blocks
+say Show me slide 3 of demo/deck.pdf and tell me which species was rarest.
+done
+shot blocks
+pause 3

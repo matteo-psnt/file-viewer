@@ -55,7 +55,7 @@ That applies everywhere you run Claude Code, so leave it out if you also use a t
 | Rio, Claude Agents sessions | The real picture with the setting above, blocks without it |
 | Warp, WezTerm, Konsole, VS Code | Blocks. They don't draw the placeholders Claude Code uses |
 | Terminal.app, Alacritty, Windows Terminal, foot | Blocks. No kitty graphics |
-| tmux, screen | Blocks. Claude Code doesn't send pictures through them |
+| tmux, screen | Often a blank card: Claude Code sends the picture, but tmux doesn't pass it on, and the plugin can't tell. Turn on blocks, below |
 
 Where pictures can't show, the page is drawn in coloured block characters, four blocks to a character cell, with a line saying why and what would show the real picture. It's rough, but you can tell the slides apart and see the charts. Claude is told you see a block preview, so it describes small text and fine detail in words. The blocks come from ImageMagick, or from `sips` on macOS; with neither, you get a notice with a button to open the file in its own app.
 
@@ -68,6 +68,8 @@ iTerm2 can show the real picture without the env setting above, through iTerm2's
 3. Start a new Claude Code session.
 
 The helper runs only in iTerm2, only while pictures would otherwise be blocks, and stops with the session. If it can't start, previews stay blocks and Claude Code's debug log says why. To see each draw it makes, start `claude` with `FILE_VIEWER_DEBUG=/tmp/overlay.log`. It's ported from [inline-images](https://github.com/chrisns/claude-image-cli-mod); see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+To always get blocks, say inside tmux, add `"FILE_VIEWER_BLOCKS": "1"` to `env` in `~/.claude/settings.json`.
 
 Click a picture to open the file in its own app. Over ssh and under WSL the plugin sends picture bytes instead of file paths; if that guess is wrong, change "Image transport" in `/config`.
 

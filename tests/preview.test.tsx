@@ -491,3 +491,27 @@ test('in iTerm2 the overlay draws over marked blocks', async ($, on) => {
   expect(await ui.find({ type: 'Text', text: /Block preview/ })).toBeUndefined()
   stop()
 })
+
+test('FILE_VIEWER_BLOCKS draws blocks without a note', async ($, on) => {
+  mock.store(on)
+  mock.env(on, { TERM_PROGRAM: 'ghostty', FILE_VIEWER_BLOCKS: '1' })
+  on('fs.exists', () => ({ value: true }))
+  let size = [0, 0]
+  on('process.run', (_$, e) => {
+    if (e.argv[1]?.endsWith('cells.sh')) {
+      size = [Number(e.argv[3]), Number(e.argv[4])]
+      return ok('/c/pic-c.bmp\n')
+    }
+    return ok('/c/pic.png\t200\t100\t1\t1\t/a/pic.png\t-\t-\n')
+  })
+  on('fs.read', () => ({ value: { base64: halves(size[0]!, size[1]!) } }))
+  await startRefused($, on, 'never asked')
+
+  const ran = await $.tool.call(pngTool('f1'))
+  expect(ran.result).toMatch(/coloured block characters/)
+  const ui = await $.ui.mount({
+    plugin: 'file-viewer', surface: 'terminal', component: 'ToolResult', requestId: 'f1', props: result('f1', ran.result),
+  })
+  expect((await ui.find({ key: 'pic' }))?.props).toMatchObject({ columns: 64, rows: 16 })
+  expect(await ui.find({ type: 'Text', text: /Block preview/ })).toBeUndefined()
+})

@@ -8,7 +8,8 @@
 #
 #   tools Write              also allow these tools without asking
 #   mode acceptEdits         start in this permission mode (default: default)
-#   blocks                   record the block preview other terminals get
+#   blocks                   record the block preview: Claude Code runs inside
+#                            tmux, where it sends no pictures
 #   say <text>               type a prompt and press enter
 #   done                     wait until Claude's turn ends
 #   view <path>              run /view <path>
@@ -32,8 +33,15 @@ tools=mcp__file-viewer__preview
 extra=$(sed -n 's/^tools //p' "$scenario" | head -1)
 [ -n "$extra" ] && tools="$tools,$extra"
 mode=$(sed -n 's/^mode //p' "$scenario" | head -1)
-blocks=0
-grep -q '^blocks$' "$scenario" && blocks=1
+# Inside tmux Claude Code sends no pictures, so previews come out as blocks;
+# its own server, with no status bar. CLAUDE_CODE_FORCE_TERMINAL_IMAGES would
+# make it send them anyway, so it is turned off for the session.
+tmux_sock=file-viewer-demo-$$
+set -- claude --permission-mode "${mode:-default}" --allowedTools "$tools"
+if grep -q '^blocks$' "$scenario"; then
+  set -- tmux -L "$tmux_sock" -f /dev/null new-session \
+    "$* --settings '{\"env\":{\"CLAUDE_CODE_FORCE_TERMINAL_IMAGES\":\"0\"}}'" \; set-option status off
+fi
 
 k() { "$kitty" @ --to "$sock" "$@"; }
 screen() { k get-text --extent all 2>/dev/null || true; }
@@ -43,15 +51,15 @@ turns() { screen | grep -c '· done' || true; }
 env -u CLAUDECODE -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH \
   -u CLAUDE_CODE_MESSAGING_SOCKET -u CLAUDE_CODE_MESSAGING_TOKEN -u CLAUDE_CODE_SESSION_ATTENDED \
   -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_SESSION_KIND -u CLAUDE_EFFORT -u CLAUDE_JOB_DIR -u CLAUDE_PID \
-  DISABLE_AUTOUPDATER=1 FILE_VIEWER_BLOCKS=$blocks \
+  DISABLE_AUTOUPDATER=1 \
   "$kitty" -o allow_remote_control=socket-only --listen-on "$sock" \
   -o hide_window_decorations=titlebar-only -o remember_window_size=no \
   -o initial_window_width=118c -o initial_window_height=40c -o font_size=15 \
   -o window_padding_width=10 -o confirm_os_window_close=0 \
   --title file-viewer-demo --directory "$repo" \
-  claude --permission-mode "${mode:-default}" --allowedTools "$tools" >/dev/null 2>&1 &
+  "$@" >/dev/null 2>&1 &
 kpid=$!
-trap 'kill $kpid ${cpid:-} 2>/dev/null || true' EXIT
+trap 'kill $kpid ${cpid:-} 2>/dev/null || true; tmux -L "$tmux_sock" kill-server 2>/dev/null || true' EXIT
 
 # Wait for Claude Code's status line, so the first keys aren't swallowed.
 i=0

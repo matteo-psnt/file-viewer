@@ -69,7 +69,7 @@ iTerm2 can show the real picture without the env setting above, through iTerm2's
 
 The helper runs only in iTerm2, only while pictures would otherwise be blocks, and stops with the session. If it can't start, previews stay blocks and Claude Code's debug log says why. To see each draw it makes, start `claude` with `FILE_VIEWER_DEBUG=/tmp/overlay.log`. It's ported from [inline-images](https://github.com/chrisns/claude-image-cli-mod); see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-If you've set `CLAUDE_CODE_FORCE_TERMINAL_IMAGES` and a terminal you also use can't draw pictures, Claude Code sends them anyway and you get blank cards or stray characters. Start Claude Code there with `FILE_VIEWER_BLOCKS=1` to get blocks.
+If you've set `CLAUDE_CODE_FORCE_TERMINAL_IMAGES` and a terminal you also use can't draw pictures, Claude Code sends them anyway and you get blank cards or stray characters. Leave the setting out to get blocks there.
 
 Click a picture to open the file in its own app. Over ssh and under WSL the plugin sends picture bytes instead of file paths; if that guess is wrong, change "Image transport" in `/config`.
 

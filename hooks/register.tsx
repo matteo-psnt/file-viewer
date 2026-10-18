@@ -230,7 +230,7 @@ const PROBE_BYTES =
 // person and for Claude. Claude Code turns pictures on only for Ghostty and
 // kitty 0.28+, and says which check failed in its refusal, e.g. "no
 // placeholder images (probe: graphics reply OK, terminal iTerm2 3.7.4)".
-type Blocked = { why: string; fix: string; isForced?: true }
+type Blocked = { why: string; fix: string }
 
 const TERMINAL_NAMES: Record<string, string> = {
   Apple_Terminal: 'Terminal.app',
@@ -284,19 +284,6 @@ function explainDeny(deny: string, termProgram: string | undefined): Blocked {
 }
 
 async function runProbe($: EngineInterface, attempt = 0) {
-  // Asked for blocks: where the probe passes but nothing shows (tmux), or to
-  // record them.
-  if ((await $.env.get('FILE_VIEWER_BLOCKS').catch(() => undefined)) === '1') {
-    probe.blocked = {
-      why: 'Block previews are turned on (FILE_VIEWER_BLOCKS).',
-      fix: 'Remove FILE_VIEWER_BLOCKS from env for real pictures.',
-      isForced: true,
-    }
-    probe.verdict = 'none'
-    probe.phase = 'done'
-    $.ui.invalidate('ui.render')
-    return
-  }
   if (probe.bandId === undefined) {
     if (attempt < 10) {
       $.clock.after(300, () => void runProbe($, attempt + 1))
@@ -947,7 +934,7 @@ async function previewCard($: EngineInterface, e: RenderInput<'ToolResult'>, id:
       <Box justifyContent="center">
         {shown && clickable($.ui.resolve(e), e.requestId, `${at}pic`, shown, box, value.source)}
       </Box>
-      {probe.blocked && !probe.blocked.isForced && overlay !== 'live' && (
+      {probe.blocked && overlay !== 'live' && (
         <Text dimColor wrap="wrap">Block preview: {probe.blocked.why} {probe.blocked.fix}</Text>
       )}
       <Box flexDirection="row" gap={2}>
@@ -1221,7 +1208,7 @@ export const register: Register = (on, options: PluginOptions) => {
     const room = (e.props.scroll?.bodyRows ?? 0) > 0 ? e.props.scroll.bodyRows : Math.max(12, (e.viewport?.rows ?? 30) - 10)
     const inner = Math.max(20, e.props.bodyColumns - 2)
     // The notes wrap rather than losing their end ("install LibreOffice…").
-    const blocksNote = probe.blocked && !probe.blocked.isForced && overlay !== 'live' ? `Block preview: ${probe.blocked.why} ${probe.blocked.fix}` : undefined
+    const blocksNote = probe.blocked && overlay !== 'live' ? `Block preview: ${probe.blocked.why} ${probe.blocked.fix}` : undefined
     const noteRows = [p.note, blocksNote].reduce((sum, note) => sum + (note ? Math.ceil((note.length + 2) / inner) : 0), 0)
     const bodyRows = Math.max(6, room - 4 - noteRows)
     const thumbs = state.thumbs ?? []

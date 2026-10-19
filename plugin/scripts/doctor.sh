@@ -55,7 +55,7 @@ if has qlmanage || has unzip; then ok "Keynote, Pages, Numbers (first page)"; el
 echo
 echo "Terminal (${TERM_PROGRAM:-unknown}, TERM=${TERM:-unset})"
 if [ -n "$TMUX" ]; then
-  no "Inside tmux: Claude Code can't draw pictures through tmux. Run it outside tmux."
+  no "Inside tmux: Claude Code can't draw pictures through tmux, so previews are drawn in blocks. Run it outside tmux for the real picture."
 fi
 if [ -n "$SSH_CONNECTION$SSH_TTY" ]; then
   meh "Over ssh: pictures are sent as bytes, since your terminal can't read this machine's files."
@@ -130,14 +130,14 @@ def placeholder_test():
 # Ghostty or kitty, whatever else can draw them.
 allowed = os.environ.get("TERM_PROGRAM", "").lower() == "ghostty" or "kitty" in os.environ.get("TERM", "")
 if "i=31;OK" not in text:
-    print(f"  {red} No kitty graphics: previews show a notice instead of the picture.")
+    print(f"  {red} No kitty graphics: previews are drawn in coloured blocks instead.")
     print("    Ghostty and kitty draw them.")
 else:
     print("  Do you see a small red and blue bar here? [y/n] ", end="")
     if not placeholder_test():
         print(f"  {red} This terminal answers kitty graphics queries but doesn't draw the")
         print("    placeholder images Claude Code uses (Warp, WezTerm, Konsole and VS Code are")
-        print("    known cases). Previews show a notice instead of the picture.")
+        print("    known cases). Previews are drawn in coloured blocks instead.")
     elif not allowed and not os.environ.get("CLAUDE_CODE_FORCE_TERMINAL_IMAGES"):
         print(f"  {yellow} This terminal draws pictures, but Claude Code only turns them on for")
         print("    Ghostty and kitty. Add \"CLAUDE_CODE_FORCE_TERMINAL_IMAGES\": \"1\" to \"env\" in")

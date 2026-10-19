@@ -22,6 +22,8 @@ fi
 # shellcheck disable=SC2088
 case "$cache" in "~/"*) cache="$HOME/${cache#\~/}" ;; esac
 mkdir -p "$cache"
+# Rendered pages of private files: for this user only.
+chmod 700 "$cache"
 # Drop what nothing has used for a month; a preview that needs it renders again.
 find "$cache" -mindepth 1 -maxdepth 1 -mtime +30 -exec rm -rf {} + 2>/dev/null || true
 # shellcheck disable=SC2088
@@ -30,6 +32,12 @@ case "$src" in "~/"*) src="$HOME/${src#\~/}" ;; esac
 src="$(cd "$(dirname "$src")" && pwd)/$(basename "$src")"
 
 has() { command -v "$1" >/dev/null 2>&1; }
+
+# Bounds for ImageMagick, so a file it does read can't take the machine: past
+# the memory it spills to disk, past the disk or the time it gives up.
+export MAGICK_MEMORY_LIMIT="${MAGICK_MEMORY_LIMIT:-536870912}"
+export MAGICK_DISK_LIMIT="${MAGICK_DISK_LIMIT:-4294967296}"
+export MAGICK_TIME_LIMIT="${MAGICK_TIME_LIMIT:-120}"
 
 # ImageMagick 7 is `magick`; distributions that still ship 6 have `convert`.
 im() {
@@ -64,6 +72,48 @@ out="$cache/$doc-p$page.png"
 pages=1
 frames=-
 note=-
+
+# An image file must hold an image of a kind it is named for. ImageMagick picks
+# its decoder by what a file holds, so a ".png" that holds PostScript, PDF, SVG
+# or one of ImageMagick's own scripts (MVG, MSL) would reach Ghostscript or
+# worse. TGA has no signature, so it is only checked against those.
+sniff_image() {
+  head=$(od -An -tx1 -N16 "$src" | tr -d ' \n')
+  case "$head" in
+    89504e47*|ffd8ff*|47494638*|424d*|38425053*|00000100*|69636e73*) return 0 ;; # png jpeg gif bmp psd ico icns
+    52494646????????57454250*) return 0 ;; # webp
+    49492a00*|4d4d002a*|4949524f*|49495253*|4d4d4f52*|49495500*) return 0 ;; # tiff and the raw formats built on it
+    ????????66747970*|0000000c6a502020*|46554a4946494c4d*) return 0 ;; # heic avif cr3, jp2, raf
+  esac
+  if [ "$ext" = tga ]; then
+    case "$head" in
+      2550*|2521*|c5d0d3c6*|3c*|*7669657762*|70757368*) ;; # %P, %!, EPS, <, viewbox, push
+      *) return 0 ;;
+    esac
+  fi
+  echo "$(basename "$src") doesn't hold a .$ext image" >&2
+  exit 3
+}
+
+# A picture of more pixels than this is refused before it is decoded: a small
+# file can claim a huge size. 200 million is past any camera's.
+MAX_PIXELS=200000000
+check_pixels() {
+  # identify -ping reads only the header; sips may decode the image to say.
+  if has magick || has identify; then
+    set -- "$(im_identify -ping -format '%w %h\n' "$src" 2>/dev/null | head -1)"
+    w=${1% *}
+    h=${1#* }
+  elif has sips; then
+    w=$(sips -g pixelWidth "$src" 2>/dev/null | awk '/pixelWidth/ {print $2}')
+    h=$(sips -g pixelHeight "$src" 2>/dev/null | awk '/pixelHeight/ {print $2}')
+  fi
+  case "$w$h" in '' | *[!0-9]*) return 0 ;; esac
+  if [ "$((w * h))" -gt "$MAX_PIXELS" ]; then
+    echo "$(basename "$src") is ${w}x$h, too large to preview safely" >&2
+    exit 3
+  fi
+}
 
 # Any still image to a PNG at most 1600 px on its long side. Written beside
 # the target and moved into place, so a killed render leaves no half a PNG.
@@ -326,9 +376,13 @@ case "$ext" in
     fi
     ;;
   gif|webp|apng)
+    sniff_image
+    check_pixels
     animate || to_png "$src" "$out"
     ;;
   png|jpg|jpeg|heic|heif|avif|tif|tiff|bmp|psd|tga|ico|icns|jp2|dng|cr2|cr3|nef|arw|raf|orf|rw2)
+    sniff_image
+    check_pixels
     to_png "$src" "$out"
     ;;
   svg|svgz)

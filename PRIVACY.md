@@ -8,13 +8,13 @@ The files you or Claude ask it to preview, and only when asked. It also reads a 
 
 ## What it stores
 
-Rendered pages of the files it previews, as PNG images in a local cache folder: `~/Library/Caches/claude-file-viewer` on macOS, `~/.cache/claude-file-viewer` on Linux. Anything unused for 30 days is deleted. You can delete the folder at any time.
+Rendered pages of the files it previews, as PNG images in a local cache folder: `~/Library/Caches/claude-file-viewer` on macOS, `~/.cache/claude-file-viewer` on Linux. Only your user can read the folder, and anything unused for 30 days is deleted. You can delete the folder at any time.
 
 It also saves which file and page each preview showed, inside Claude Code's own plugin storage on your machine, so a resumed conversation can draw the preview again.
 
 ## What it runs
 
-Local programs that turn files into pictures: poppler, LibreOffice, ImageMagick or `sips`, `rsvg-convert`, and on macOS without LibreOffice, Quick Look and a headless Chrome. The open button hands the file to your system's default app. None of these are given anything except the file you asked to preview.
+Local programs that turn files into pictures: poppler, LibreOffice, ImageMagick or `sips`, `rsvg-convert`, and on macOS without LibreOffice, Quick Look and a headless Chrome. In iTerm2, if you've installed its `iterm2` Python module and turned on its Python API, a helper reads the text on your Claude Code session's screen through that API, to find where the block previews are, and draws the pictures over them. It reads only that session's screen, keeps nothing, and talks only to iTerm2 on your machine. The open button hands the file to your system's default app. The converters are given nothing except the file you asked to preview.
 
 ## Questions
 

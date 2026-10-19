@@ -53,6 +53,15 @@ if [ "$(uname -s)" = Darwin ] && ! command -v soffice >/dev/null 2>&1 && [ ! -x 
   expect sheet.xlsx 1 4 1 "draws a spreadsheet as one page through Quick Look"
 fi
 
+refuses postscript.png "doesn't hold a .png image"
+refuses huge.png "too large to preview safely"
+if [ -n "$(find "$cache" -maxdepth 0 -perm 700)" ]; then
+  printf 'ok   cache: only its owner can read it\n'
+else
+  printf 'FAIL cache: others can read it\n'
+  failures=$((failures + 1))
+fi
+
 line=$(sh "$render" "$fixtures/spinner.gif" 1 "$cache")
 list=$(printf '%s' "$line" | cut -f7)
 if [ -f "$list" ] && [ "$(wc -l < "$list" | tr -d ' ')" = 3 ] && [ "$(cut -f2 "$list" | sort -u)" = 100 ]; then

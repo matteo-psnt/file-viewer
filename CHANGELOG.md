@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.0](https://github.com/matteo-psnt/file-viewer/compare/v0.2.0...v0.3.0) (2026-10-19)
+
+
+### Features
+
+* block previews, iTerm2 overlay, and previews of files Claude sends ([#6](https://github.com/matteo-psnt/file-viewer/issues/6)) ([8b373c1](https://github.com/matteo-psnt/file-viewer/commit/8b373c17ba72ffd239df584765a94276cee878ae))
+* show previews in the desktop app and editor ([#3](https://github.com/matteo-psnt/file-viewer/issues/3)) ([82697f1](https://github.com/matteo-psnt/file-viewer/commit/82697f17b73ce7f78679836418868c5683506b11))
+
 ## [0.2.0](https://github.com/matteo-psnt/file-viewer/compare/v0.1.1...v0.2.0) (2026-10-14)
 
 

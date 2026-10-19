@@ -2,7 +2,7 @@
 
 ## inline-images
 
-`scripts/iterm_overlay.py` is ported from `mod/bin/iterm_overlay.py` in [inline-images](https://github.com/chrisns/claude-image-cli-mod). The marker scheme in `hooks/blocks.ts` and `hooks/overlay.ts` and the click layer in `hooks/click.tsx` follow the same project. Its license:
+`scripts/iterm_overlay.py` is ported from `mod/bin/iterm_overlay.py` in [inline-images](https://github.com/chrisns/claude-image-cli-mod). The marker scheme in `hooks/blocks.ts` and `hooks/register.tsx` and the click layer in `hooks/click.tsx` follow the same project. Its license:
 
 ```
 MIT License

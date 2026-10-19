@@ -82,7 +82,7 @@ sniff_image() {
   case "$head" in
     89504e47*|ffd8ff*|47494638*|424d*|38425053*|00000100*|69636e73*) return 0 ;; # png jpeg gif bmp psd ico icns
     52494646????????57454250*) return 0 ;; # webp
-    49492a00*|4d4d002a*|49494f52*|49495552*|49495500*) return 0 ;; # tiff and the raw formats built on it
+    49492a00*|4d4d002a*|4949524f*|49495253*|4d4d4f52*|49495500*) return 0 ;; # tiff and the raw formats built on it
     ????????66747970*|0000000c6a502020*|46554a4946494c4d*) return 0 ;; # heic avif cr3, jp2, raf
   esac
   if [ "$ext" = tga ]; then

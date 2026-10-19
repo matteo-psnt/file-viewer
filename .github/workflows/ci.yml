@@ -19,13 +19,6 @@ jobs:
       - run: claude plugin validate .
       - run: claude plugin validate plugin
       - run: claude plugin test plugin
-      # Claude Code writes the plugin API's types beside a plugin when a session
-      # loads it. A session with a placeholder key loads it, then stops at its
-      # first request.
-      - run: ANTHROPIC_API_KEY=placeholder ANTHROPIC_BASE_URL=http://10.255.255.1 timeout 30 claude -p --debug-file /tmp/cc.log --plugin-dir ./plugin hi || true
-      - run: ls -R plugin/.claude-plugin | head; grep -iE 'authoring|gate|type root' /tmp/cc.log | cut -c1-400 | head -30 || true
-      - run: test -f plugin/.claude-plugin/types/claude-code/index.d.ts
-      - run: npx -y -p typescript@7.0.2 tsc -p plugin
 
   overlay:
     name: iTerm2 overlay

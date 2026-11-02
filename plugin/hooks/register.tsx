@@ -608,7 +608,7 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
   }
   const page = (
     <Box flexDirection="column" flexGrow={isStrip ? 0 : 1} alignItems="center" justifyContent="center" height={isStrip ? box.rows : pageRows}>
-      {pagePicture && clickable($.ui.resolve(e), PANE, 'page', pagePicture, box, p.source)}
+      {pagePicture && clickable($.ui.resolve(e), PANE, 'page', pagePicture, box, { kind: 'open', source: p.source })}
     </Box>
   )
   // Footer: the buttons always, then as much of the key hint as fits. The
@@ -645,7 +645,7 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
 
               return (
                 <Box key={`side:${t.page}`} flexDirection="column" alignItems="center" width={thumbColumns}>
-                  {thumb?.node}
+                  {thumb?.node && clickable($.ui.resolve(e), PANE, `thumb:${t.page}`, thumb.node, thumb.size, { kind: 'page', page: t.page })}
                   <Text color="claude">{(isCurrent ? '━' : ' ').repeat(columns)}</Text>
                   <Box width={columns} justifyContent="center">
                     {pageButton(t.page, isCurrent)}
@@ -670,7 +670,7 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
                       {pageButton(t.page, isCurrent)}
                     </Box>
                     <Text color="claude">{Array.from({ length: rows }, () => (isCurrent ? '▌' : ' ')).join('\n')}</Text>
-                    {thumb?.node}
+                    {thumb?.node && clickable($.ui.resolve(e), PANE, `thumb:${t.page}`, thumb.node, thumb.size, { kind: 'page', page: t.page })}
                   </Box>
                 )
               })}
@@ -804,7 +804,7 @@ async function previewCard($: EngineInterface, e: RenderInput<'ToolResult'>, id:
       </Box>
       {value.caption && <Text dimColor italic wrap="truncate-end">{value.caption}</Text>}
       <Box justifyContent="center">
-        {shown && clickable($.ui.resolve(e), e.requestId, `${at}pic`, shown, box, value.source)}
+        {shown && clickable($.ui.resolve(e), e.requestId, `${at}pic`, shown, box, { kind: 'open', source: value.source })}
       </Box>
       {probe.blocked && overlay.state !== 'live' && (
         <Text dimColor wrap="wrap">Block preview: {probe.blocked.why} {probe.blocked.fix}</Text>
@@ -1027,11 +1027,19 @@ export const register: Register = (on, options: PluginOptions) => {
     return (await drawPane($, e)) ?? next(e)
   })
 
-  // A click on a picture opens its file in the file's own app.
+  // A click on a picture opens its file in the file's own app; a click on a
+  // viewer thumbnail turns to that page instead.
   on('ui.message', async ($, e, next) => {
-    const source = clickTargets.get(`${e.requestId}\u0000${e.element}`)
-    if ((e.data as { open?: unknown } | undefined)?.open === true && source !== undefined) {
-      openExternally($, source)
+    const target = clickTargets.get(`${e.requestId}\u0000${e.element}`)
+    if ((e.data as { open?: unknown } | undefined)?.open === true && target !== undefined) {
+      if (target.kind === 'open') {
+        openExternally($, target.source)
+      } else {
+        const state = await getViewer($)
+        if (state !== null) {
+          void turnViewer($, state.preview, target.page).catch(() => undefined)
+        }
+      }
     }
 
     return next(e)

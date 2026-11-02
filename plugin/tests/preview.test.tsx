@@ -130,6 +130,31 @@ test('the viewer shows a sidebar of pages and turns with the arrow keys', async 
   expect((await ui.find({ key: 'page' }))?.props).toMatchObject({ source: { file: '/c/p6.png' } })
 })
 
+test('clicking a thumbnail turns to its page', async ($, on) => {
+  mock.store(on)
+  on('fs.exists', () => ({ value: true }))
+  on('process.run', (_$, e) => page(Number(e.argv[3])))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.focus', () => ({}))
+  await $.tool.call({ tool: 'mcp__file-viewer__preview', path: '/notes/deck.pptx', page: 6, mode: 'viewer' })
+
+  const ui = await $.ui.mount({
+    plugin: 'file-viewer',
+    surface: 'terminal',
+    component: 'Pane',
+    requestId: 'file-viewer',
+    viewport: { columns: 140, rows: 50 },
+    props: { title: 'Viewer', isFocused: true, bodyColumns: 130, placement: 'inline' } as never,
+  })
+  expect((await ui.find({ key: 'page' }))?.props).toMatchObject({ source: { file: '/c/p6.png' } })
+
+  // The surface measures the layer before it sends pointer events.
+  await ui.resize({ columns: 64, rows: 32, in: 'click:thumb:8' })
+  await ui.pointer({ type: 'down', x: 1, y: 1, button: 'left', in: 'click:thumb:8' })
+  await ui.pointer({ type: 'up', x: 1, y: 1, button: 'left', in: 'click:thumb:8' })
+  expect((await ui.find({ key: 'page' }))?.props).toMatchObject({ source: { file: '/c/p8.png' } })
+})
+
 test('a resumed conversation draws a preview from the store', async ($, on) => {
   mock.store(on, {
     'preview:old-call': {

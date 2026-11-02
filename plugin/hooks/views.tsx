@@ -2,19 +2,20 @@ import type { Elements } from 'claude-code'
 
 import type { Blocked } from './deny.ts'
 import { formatOf, nameOf, pageLabel, type ImagePreview } from './files.ts'
-import { clickTargets } from './session.ts'
+import { clickTargets, type ClickTarget } from './session.ts'
 
-// A picture under a layer that opens `source` in its own app when clicked.
+// A picture under a layer that performs `target` (opening a file or turning
+// to a page) when clicked.
 export function clickable(
   { Box, Client }: Elements['terminal'],
   requestId: string,
   key: string,
   node: ReturnType<Elements['terminal']['Box']>,
   box: { columns: number; rows: number },
-  source: string,
+  target: ClickTarget,
 ) {
   const layer = `click:${key}`
-  clickTargets.set(`${requestId}\u0000${layer}`, source)
+  clickTargets.set(`${requestId}\u0000${layer}`, target)
   if (clickTargets.size > 500) {
     clickTargets.delete(clickTargets.keys().next().value!)
   }

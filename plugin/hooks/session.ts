@@ -59,9 +59,10 @@ export const cellsOf = new Map<string, string>()
 
 export type Draw = { key: string; png: string; columns: number; rows: number; alt: string }
 
-// What a click on a picture opens, by the drawing and the click layer's key:
-// the layer's message names no path, so nothing it sends picks the file.
-export const clickTargets = new Map<string, string>()
+// What a click on a picture does, by the drawing and the click layer's key:
+// the layer's message carries no payload, so nothing it sends picks this.
+export type ClickTarget = { kind: 'open'; source: string } | { kind: 'page'; page: number }
+export const clickTargets = new Map<string, ClickTarget>()
 
 // A preview whose PNG the cache lost is rendered again, outside the draw.
 export const rerendering = new Set<string>()

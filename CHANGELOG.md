@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/matteo-psnt/file-viewer/compare/v0.3.0...v0.4.0) (2026-11-02)
+
+
+### Features
+
+* turn pages by clicking a viewer thumbnail ([320573f](https://github.com/matteo-psnt/file-viewer/commit/320573f0d91fa0f2f5441c5d665bd3a338b93331))
+
 ## [0.3.0](https://github.com/matteo-psnt/file-viewer/compare/v0.2.0...v0.3.0) (2026-10-19)
 
 

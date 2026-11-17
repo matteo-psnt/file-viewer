@@ -20,13 +20,16 @@ export function clickable(
     clickTargets.delete(clickTargets.keys().next().value!)
   }
 
-  // The layer comes first: drawn after a Raster, its empty box would paint over it.
+  // The layer holds the room and the picture is laid over it. An absolute Box
+  // is painted over what comes before it, but the pointer on it is on its
+  // parent, so a click falls through the picture to the layer beneath. (The
+  // other way round, the layer in the absolute Box never heard a click.)
   return (
     <Box key={`wrap:${key}`} width={box.columns} height={box.rows}>
+      <Client key={layer} module="./click.tsx" width={box.columns} height={box.rows} />
       <Box position="absolute" top={0} left={0} width={box.columns} height={box.rows}>
-        <Client key={layer} module="./click.tsx" width={box.columns} height={box.rows} />
+        {node}
       </Box>
-      {node}
     </Box>
   )
 }

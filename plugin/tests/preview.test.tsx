@@ -114,20 +114,20 @@ test('the viewer shows a sidebar of pages and turns with the arrow keys', async 
     viewport: { columns: 140, rows: 50 },
     props: { title: 'Viewer', isFocused: true, bodyColumns: 130, placement: 'inline' } as never,
   })
-  expect((await ui.find({ key: 'page' }))?.props).toMatchObject({ source: { file: '/c/p6.png' } })
+  expect((await ui.find({ key: 'page:6' }))?.props).toMatchObject({ source: { file: '/c/p6.png' } })
   for (const n of [4, 5, 6, 7, 8]) {
     expect(await ui.find({ key: `thumb:${n}` })).toBeDefined()
   }
 
   // An arrow key moving the ring onto page 7's button turns to page 7.
   await $.ui.focus({ component: 'Pane', requestId: 'file-viewer', element: 'thumb:7', origin: { kind: 'person' } })
-  expect((await ui.find({ key: 'page' }))?.props).toMatchObject({ source: { file: '/c/p7.png' } })
+  expect((await ui.find({ key: 'page:7' }))?.props).toMatchObject({ source: { file: '/c/p7.png' } })
   expect(await ui.find({ key: 'thumb:9' })).toBeDefined()
 
   await ui.press({ key: 'thumb:5' })
-  expect((await ui.find({ key: 'page' }))?.props).toMatchObject({ source: { file: '/c/p5.png' } })
+  expect((await ui.find({ key: 'page:5' }))?.props).toMatchObject({ source: { file: '/c/p5.png' } })
   await ui.press({ key: 'next' })
-  expect((await ui.find({ key: 'page' }))?.props).toMatchObject({ source: { file: '/c/p6.png' } })
+  expect((await ui.find({ key: 'page:6' }))?.props).toMatchObject({ source: { file: '/c/p6.png' } })
 })
 
 test('clicking a thumbnail turns to its page', async ($, on) => {
@@ -146,13 +146,56 @@ test('clicking a thumbnail turns to its page', async ($, on) => {
     viewport: { columns: 140, rows: 50 },
     props: { title: 'Viewer', isFocused: true, bodyColumns: 130, placement: 'inline' } as never,
   })
-  expect((await ui.find({ key: 'page' }))?.props).toMatchObject({ source: { file: '/c/p6.png' } })
+  expect((await ui.find({ key: 'page:6' }))?.props).toMatchObject({ source: { file: '/c/p6.png' } })
 
   // The surface measures the layer before it sends pointer events.
   await ui.resize({ columns: 64, rows: 32, in: 'click:thumb:8' })
   await ui.pointer({ type: 'down', x: 1, y: 1, button: 'left', in: 'click:thumb:8' })
   await ui.pointer({ type: 'up', x: 1, y: 1, button: 'left', in: 'click:thumb:8' })
-  expect((await ui.find({ key: 'page' }))?.props).toMatchObject({ source: { file: '/c/p8.png' } })
+  expect((await ui.find({ key: 'page:8' }))?.props).toMatchObject({ source: { file: '/c/p8.png' } })
+
+  // A click while the pane holds the keyboard first moves the ring onto the
+  // layer. That move must go through untouched, so the layer still hears the
+  // button come up and its message turns the page.
+  const moved = await $.ui.focus({
+    component: 'Pane', requestId: 'file-viewer', element: 'click:thumb:7', origin: { kind: 'person' },
+  })
+  expect(moved.deny).toBeUndefined()
+  expect(await ui.find({ key: 'page:8' })).toBeDefined()
+  await ui.resize({ columns: 64, rows: 32, in: 'click:thumb:7' })
+  await ui.pointer({ type: 'down', x: 1, y: 1, button: 'left', in: 'click:thumb:7' })
+  await ui.pointer({ type: 'up', x: 1, y: 1, button: 'left', in: 'click:thumb:7' })
+  expect((await ui.find({ key: 'page:7' }))?.props).toMatchObject({ source: { file: '/c/p7.png' } })
+})
+
+test('the viewer goes to a typed page', async ($, on) => {
+  mock.store(on)
+  mock.clock(on)
+  on('fs.exists', () => ({ value: true }))
+  on('process.run', (_$, e) => page(Number(e.argv[3])))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.focus', () => ({}))
+  await $.tool.call({ tool: 'mcp__file-viewer__preview', path: '/notes/deck.pptx', page: 2, mode: 'viewer' })
+  const ui = await $.ui.mount({
+    plugin: 'file-viewer',
+    surface: 'terminal',
+    component: 'Pane',
+    requestId: 'file-viewer',
+    viewport: { columns: 140, rows: 50 },
+    props: { title: 'Viewer', isFocused: true, bodyColumns: 130, placement: 'inline' } as never,
+  })
+
+  expect(await ui.find({ key: 'goto' })).toBeUndefined()
+  await ui.press({ key: 'go' })
+  expect(await ui.find({ key: 'goto' })).toBeDefined()
+  await ui.input({ key: 'goto', text: '11' })
+  expect((await ui.find({ key: 'page:11' }))?.props).toMatchObject({ source: { file: '/c/p11.png' } })
+  expect(await ui.find({ key: 'goto' })).toBeUndefined()
+
+  // A number past the end goes to the last page.
+  await ui.press({ key: 'go' })
+  await ui.input({ key: 'goto', text: '99' })
+  expect(await ui.find({ key: 'page:12' })).toBeDefined()
 })
 
 test('a resumed conversation draws a preview from the store', async ($, on) => {
@@ -549,4 +592,34 @@ test("the card keeps the picture's shape in the terminal's measured cells", asyn
   // 8 px by 24 px cells: three times as tall, so a third as many rows per column.
   await clock.advance(10)
   expect((await ui.find({ key: 'pic' }))?.props).toMatchObject({ columns: 64, rows: 16 })
+})
+
+test('the thumbnails stay where they are across pages of other shapes', async ($, on) => {
+  mock.store(on)
+  on('fs.exists', () => ({ value: true }))
+  // Odd pages are wide slides, even pages tall documents.
+  on('process.run', (_$, e) => {
+    const n = Number(e.argv[3])
+    const [w, h] = n % 2 === 1 ? [1000, 562] : [595, 842]
+
+    return ok(`/c/p${n}.png\t${w}\t${h}\t12\t${n}\t/notes/mixed.pdf\t-\t-\n`)
+  })
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.focus', () => ({}))
+  await $.tool.call({ tool: 'mcp__file-viewer__preview', path: '/notes/mixed.pdf', page: 5, mode: 'viewer' })
+  const ui = await $.ui.mount({
+    plugin: 'file-viewer',
+    surface: 'terminal',
+    component: 'Pane',
+    requestId: 'file-viewer',
+    viewport: { columns: 140, rows: 50 },
+    props: { title: 'Viewer', isFocused: true, bodyColumns: 130, placement: 'inline' } as never,
+  })
+  expect(await ui.find({ key: 'img:strip:5' })).toBeDefined()
+
+  // A tall page keeps the strip the wide page it opened on chose.
+  await ui.press({ key: 'thumb:6' })
+  expect(await ui.find({ key: 'page:6' })).toBeDefined()
+  expect(await ui.find({ key: 'img:strip:6' })).toBeDefined()
+  expect(await ui.find({ key: 'img:side:6' })).toBeUndefined()
 })

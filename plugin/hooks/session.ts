@@ -64,6 +64,10 @@ export type Draw = { key: string; png: string; columns: number; rows: number; al
 export type ClickTarget = { kind: 'open'; source: string } | { kind: 'page'; page: number }
 export const clickTargets = new Map<string, ClickTarget>()
 
+// The viewer's latest page turn: a slower render of an earlier turn (a page
+// clicked a moment before) must not land over it.
+export const turns = { latest: 0 }
+
 // A preview whose PNG the cache lost is rendered again, outside the draw.
 export const rerendering = new Set<string>()
 

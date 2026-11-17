@@ -37,6 +37,7 @@ import {
   rerendering,
   started,
   stopAnimation,
+  turns,
   type Animation,
   type Draw,
   type Transport,
@@ -507,13 +508,28 @@ async function thumbsFor($: EngineInterface, p: ImagePreview): Promise<Thumb[] |
 
   return thumbs.filter(t => t !== undefined)
 }
+// The key of the viewer's page Image: one per page, so a page of another size
+// is a new picture rather than the last one resized under it.
+const pageKey = (p: ImagePreview) => `page:${p.page}`
 async function showInViewer($: EngineInterface, p: ImagePreview) {
   // The pane's animation belongs to what it showed before; this one starts afresh.
-  stopAnimation(`${PANE}/page`)
-  started.delete(`${PANE}/page`)
-  await updateViewer($, () => ({ preview: p, thumbs: undefined }))
+  for (const id of [...animations.keys(), ...started]) {
+    if (id.startsWith(`${PANE}/page`)) {
+      stopAnimation(id)
+      started.delete(id)
+    }
+  }
+  // The thumbnails of the same file stay until the new set is ready: blanking
+  // them would redraw the whole layout twice on every turn.
+  // The layout is chosen once per file, by the page it opens on: chosen per
+  // page, a deck of mixed sizes would jump between strip and column each turn.
+  await updateViewer($, state =>
+    state?.preview.source === p.source
+      ? { preview: p, thumbs: state.thumbs, layout: state.layout }
+      : { preview: p, layout: p.width > p.height ? 'strip' : 'column' },
+  )
   const thumbs = await thumbsFor($, p)
-  await updateViewer($, state => (state?.preview.png === p.png ? { preview: p, thumbs } : state))
+  await updateViewer($, state => (state?.preview.png === p.png ? { ...state, thumbs } : state))
   // Keep the focus ring on the current page so the next arrow moves one page.
   if (p.pages > 1) {
     void $.ui.focus({ requestId: PANE, key: `thumb:${p.page}` }).catch(() => undefined)
@@ -521,13 +537,45 @@ async function showInViewer($: EngineInterface, p: ImagePreview) {
 }
 async function openViewer($: EngineInterface, value: ImagePreview) {
   await $.ui.open({ id: PANE, title: `${formatOf(value.source)} · ${nameOf(value.source)}`, focus: true, closeOnEscape: true })
+  turns.latest++
   await showInViewer($, value)
 }
 async function turnViewer($: EngineInterface, p: ImagePreview, page: number) {
+  const ticket = ++turns.latest
   if (clampPage(p, page) === p.page) {
     return
   }
-  await showInViewer($, await renderImage($, p.source, clampPage(p, page)))
+  const next = await renderImage($, p.source, clampPage(p, page))
+  // Pages clicked in quick succession render in any order; only the last stands.
+  if (ticket === turns.latest) {
+    await showInViewer($, next)
+  }
+}
+// Shows the footer's page field and puts the keyboard in it.
+async function startGoing($: EngineInterface) {
+  await updateViewer($, state => state && { ...state, isGoing: true })
+  // The field exists from the next draw on; until then the focus is refused.
+  for (let tries = 0; tries < 10; tries++) {
+    const moved = await $.ui.focus({ requestId: PANE, key: 'goto' }).catch(() => ({ deny: 'failed' }))
+    if (moved.deny === undefined) {
+      return
+    }
+    await new Promise<void>((resolve, reject) => {
+      try {
+        $.clock.after(30, resolve)
+      } catch (err) {
+        reject(err)
+      }
+    })
+  }
+}
+async function goTo($: EngineInterface, typed: string) {
+  await updateViewer($, state => state && { preview: state.preview, thumbs: state.thumbs, layout: state.layout })
+  const page = Number.parseInt(typed.trim(), 10)
+  const state = await getViewer($)
+  if (state !== null && Number.isFinite(page)) {
+    await turnViewer($, state.preview, page)
+  }
 }
 // The viewer pane: the page, its thumbnails and the footer, or null to leave
 // the pane as Claude Code draws it.
@@ -556,7 +604,7 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
       </Box>
     )
   }
-  const { Box, Text, Button } = $.ui.resolve(e)
+  const { Box, Text, Button, Input } = $.ui.resolve(e)
   measureCell($, e.viewport?.columns)
   const state: Viewer | null = await getViewer($)
   if (state === null) {
@@ -576,7 +624,7 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
   const count = Math.max(1, thumbs.length)
   // Landscape pages (slides) leave room underneath, so their thumbnails go in
   // a strip below; portrait pages (documents) leave room beside, so a column.
-  const isStrip = isPaged && p.width > p.height
+  const isStrip = isPaged && (state.layout ?? (p.width > p.height ? 'strip' : 'column')) === 'strip'
   const thumbColumns = isStrip
     ? Math.min(24, Math.floor((inner - 2 * (count - 1)) / count))
     : Math.min(22, Math.max(6, Math.floor(inner / 6)))
@@ -593,7 +641,7 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
 
         return [
           t.page,
-          { size, node: await picture($, e, { key: `img:${t.page}`, png: t.png, ...size, alt: `page ${t.page}` }) },
+          { size, node: await picture($, e, { key: `img:${isStrip ? 'strip' : 'side'}:${t.page}`, png: t.png, ...size, alt: `page ${t.page}` }) },
         ] as const
       }),
     ),
@@ -602,7 +650,7 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
   const pageButton = (page: number, isCurrent: boolean) => (
     <Button key={`thumb:${page}`} label={`${page}`} plain dimColor={!isCurrent} onPress={() => go(page)} />
   )
-  const pagePicture = await picture($, e, { key: 'page', png: p.png, ...box, alt: `[${nameOf(p.source)}${pageLabel(p)}]` })
+  const pagePicture = await picture($, e, { key: pageKey(p), png: p.png, ...box, alt: `[${nameOf(p.source)}${pageLabel(p)}]` })
   if (probe.blocked !== undefined && pagePicture === null) {
     return blockedNotice($.ui.resolve(e), p, probe.blocked, true, () => openExternally($, p.source))
   }
@@ -613,7 +661,7 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
   )
   // Footer: the buttons always, then as much of the key hint as fits. The
   // keys only reach the pane while it holds the keyboard, so say how to get it.
-  const buttonsWidth = (isPaged ? 18 : 0) + 14
+  const buttonsWidth = (isPaged ? 31 : 0) + 14
   const hints = footerHints(e.props.isFocused, isPaged)
   let hint = ''
   for (const candidate of hints) {
@@ -623,7 +671,7 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
     }
   }
   if (!isBlocks()) {
-    ensureAnimation($, PANE, 'page', p.frames, Number.POSITIVE_INFINITY, started)
+    ensureAnimation($, PANE, pageKey(p), p.frames, Number.POSITIVE_INFINITY, started)
   }
 
   return (
@@ -685,6 +733,18 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
         <Box flexDirection="row" gap={2}>
           {isPaged && <Button key="prev" label="prev" hotkey="p" plain dimColor onPress={() => go(p.page - 1)} />}
           {isPaged && <Button key="next" label="next" hotkey="n" plain dimColor onPress={() => go(p.page + 1)} />}
+          {isPaged && !state.isGoing && (
+            <Button key="go" label="go to" hotkey="g" plain dimColor onPress={() => void startGoing($).catch(() => undefined)} />
+          )}
+          {isPaged && state.isGoing && (
+            <Input
+              key="goto"
+              label="page "
+              placeholder={`1-${p.pages}`}
+              submitLabel="go"
+              onSubmit={typed => void goTo($, typed).catch(() => undefined)}
+            />
+          )}
           <Button key="open" label="open in app" hotkey="o" plain dimColor onPress={() => openExternally($, p.source)} />
         </Box>
         {hint && <Text dimColor>{hint}</Text>}
@@ -1004,6 +1064,13 @@ export const register: Register = (on, options: PluginOptions) => {
   on('ui.focus', async ($, e, next) => {
     const page = e.element?.startsWith('thumb:') ? Number(e.element.slice(6)) : Number.NaN
     if (e.requestId !== PANE || e.origin.kind !== 'person') {
+      return next(e)
+    }
+    // A click on a picture (`click:page`, `click:thumb:N`) or into the page
+    // field goes where it was aimed. Moving a picture's click elsewhere takes
+    // the focus off its layer before the button comes up, and the click is
+    // lost; the layer's message turns the page instead.
+    if (e.element?.startsWith('click:') || e.element === 'goto') {
       return next(e)
     }
     // Past the first or last thumbnail the ring would walk on to the footer

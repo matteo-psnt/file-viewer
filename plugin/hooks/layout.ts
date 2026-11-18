@@ -1,3 +1,35 @@
+import type { Preview, Thumb, Viewer } from '../types'
+
+type ImagePreview = Extract<Preview, { kind: 'image' }>
+
+// The viewer's next state for each change. Kept out of the $ calls, as plain
+// functions, so the directory's checker can read those calls.
+
+// Showing `p`. The thumbnails of the same file stay until the new set is
+// ready, and the layout is chosen once per file, by the page it opens on:
+// chosen per page, a deck of mixed sizes would jump between strip and column.
+export function viewerShowing(state: Viewer | null, p: ImagePreview): Viewer {
+  if (state?.preview.source === p.source) {
+    return { preview: p, thumbs: state.thumbs, layout: state.layout }
+  }
+
+  return { preview: p, layout: p.width > p.height ? 'strip' : 'column' }
+}
+
+// The thumbnails for `p`, unless the viewer has moved on from it.
+export function viewerWithThumbs(state: Viewer | null, p: ImagePreview, thumbs: Thumb[] | undefined) {
+  return state?.preview.png === p.png ? { ...state, thumbs } : state
+}
+
+// The footer's page field shown, or put away.
+export function viewerGoing(state: Viewer | null, isGoing: boolean): Viewer | null {
+  if (state === null) {
+    return null
+  }
+
+  return isGoing ? { ...state, isGoing: true } : { preview: state.preview, thumbs: state.thumbs, layout: state.layout }
+}
+
 // The box of cells a picture takes. `cellRatio` is a cell's height over its
 // width: about 2 in most fonts, measured where the terminal says (cellRatioOf).
 export function boxFor(

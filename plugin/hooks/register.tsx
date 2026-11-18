@@ -1,4 +1,4 @@
-import type { EngineInterface, ImageSource, PluginOptions, Register, RenderInput } from 'claude-code'
+import type { Elements, EngineInterface, ImageSource, PluginOptions, Register, RenderInput } from 'claude-code'
 
 import type { Frame, Preview, Size, Thumb, Viewer } from '../types'
 import { MARKER_CELLS, markerGlyphs, markerOf, quadrant, readBmp } from './blocks.ts'
@@ -19,7 +19,16 @@ import {
   WIDTH,
   type ImagePreview,
 } from './files.ts'
-import { boxFor, cellRatioOf, footerHints, inlineMaxRows, sidebarPages } from './layout.ts'
+import {
+  boxFor,
+  cellRatioOf,
+  footerHints,
+  inlineMaxRows,
+  sidebarPages,
+  viewerGoing,
+  viewerShowing,
+  viewerWithThumbs,
+} from './layout.ts'
 import {
   animations,
   bytesOf,
@@ -39,10 +48,11 @@ import {
   stopAnimation,
   turns,
   type Animation,
+  type ClickTarget,
   type Draw,
   type Transport,
 } from './session.ts'
-import { blockedNotice, clickable } from './views.tsx'
+import { blockedNotice, clickLayer } from './views.tsx'
 
 // Every function that takes $ is in this file: Claude Code follows $ only into
 // functions declared beside the call. The modules it imports hold the rest.
@@ -441,6 +451,34 @@ async function picture($: EngineInterface, e: Parameters<EngineInterface['ui']['
   )
 }
 
+// A picture under a layer that performs `target` (opening a file or turning
+// to a page) when clicked. The layer holds the room and the picture is laid
+// over it. An absolute Box is painted over what comes before it, but the
+// pointer on it is on its parent, so a click falls through the picture to the
+// layer beneath. (The other way round, the layer in the absolute Box never
+// heard a click.)
+function clickable(
+  $: EngineInterface,
+  e: RenderInput<'Pane', 'terminal'> | RenderInput<'ToolResult', 'terminal'>,
+  requestId: string,
+  key: string,
+  node: ReturnType<Elements['terminal']['Box']>,
+  box: { columns: number; rows: number },
+  target: ClickTarget,
+) {
+  const { Box, Client } = $.ui.resolve(e)
+  const layer = clickLayer(requestId, key, target)
+
+  return (
+    <Box key={`wrap:${key}`} width={box.columns} height={box.rows}>
+      <Client key={layer} module="./click.tsx" width={box.columns} height={box.rows} />
+      <Box position="absolute" top={0} left={0} width={box.columns} height={box.rows}>
+        {node}
+      </Box>
+    </Box>
+  )
+}
+
 function playAnimation(
   $: EngineInterface,
   requestId: string,
@@ -519,17 +557,9 @@ async function showInViewer($: EngineInterface, p: ImagePreview) {
       started.delete(id)
     }
   }
-  // The thumbnails of the same file stay until the new set is ready: blanking
-  // them would redraw the whole layout twice on every turn.
-  // The layout is chosen once per file, by the page it opens on: chosen per
-  // page, a deck of mixed sizes would jump between strip and column each turn.
-  await updateViewer($, state =>
-    state?.preview.source === p.source
-      ? { preview: p, thumbs: state.thumbs, layout: state.layout }
-      : { preview: p, layout: p.width > p.height ? 'strip' : 'column' },
-  )
+  await updateViewer($, state => viewerShowing(state, p))
   const thumbs = await thumbsFor($, p)
-  await updateViewer($, state => (state?.preview.png === p.png ? { ...state, thumbs } : state))
+  await updateViewer($, state => viewerWithThumbs(state, p, thumbs))
   // Keep the focus ring on the current page so the next arrow moves one page.
   if (p.pages > 1) {
     void $.ui.focus({ requestId: PANE, key: `thumb:${p.page}` }).catch(() => undefined)
@@ -553,7 +583,7 @@ async function turnViewer($: EngineInterface, p: ImagePreview, page: number) {
 }
 // Shows the footer's page field and puts the keyboard in it.
 async function startGoing($: EngineInterface) {
-  await updateViewer($, state => state && { ...state, isGoing: true })
+  await updateViewer($, state => viewerGoing(state, true))
   // The field exists from the next draw on; until then the focus is refused.
   for (let tries = 0; tries < 10; tries++) {
     const moved = await $.ui.focus({ requestId: PANE, key: 'goto' }).catch(() => ({ deny: 'failed' }))
@@ -570,7 +600,7 @@ async function startGoing($: EngineInterface) {
   }
 }
 async function goTo($: EngineInterface, typed: string) {
-  await updateViewer($, state => state && { preview: state.preview, thumbs: state.thumbs, layout: state.layout })
+  await updateViewer($, state => viewerGoing(state, false))
   const page = Number.parseInt(typed.trim(), 10)
   const state = await getViewer($)
   if (state !== null && Number.isFinite(page)) {
@@ -656,7 +686,7 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
   }
   const page = (
     <Box flexDirection="column" flexGrow={isStrip ? 0 : 1} alignItems="center" justifyContent="center" height={isStrip ? box.rows : pageRows}>
-      {pagePicture && clickable($.ui.resolve(e), PANE, 'page', pagePicture, box, { kind: 'open', source: p.source })}
+      {pagePicture && clickable($, e, PANE, 'page', pagePicture, box, { kind: 'open', source: p.source })}
     </Box>
   )
   // Footer: the buttons always, then as much of the key hint as fits. The
@@ -693,7 +723,7 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
 
               return (
                 <Box key={`side:${t.page}`} flexDirection="column" alignItems="center" width={thumbColumns}>
-                  {thumb?.node && clickable($.ui.resolve(e), PANE, `thumb:${t.page}`, thumb.node, thumb.size, { kind: 'page', page: t.page })}
+                  {thumb?.node && clickable($, e, PANE, `thumb:${t.page}`, thumb.node, thumb.size, { kind: 'page', page: t.page })}
                   <Text color="claude">{(isCurrent ? '━' : ' ').repeat(columns)}</Text>
                   <Box width={columns} justifyContent="center">
                     {pageButton(t.page, isCurrent)}
@@ -718,7 +748,7 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
                       {pageButton(t.page, isCurrent)}
                     </Box>
                     <Text color="claude">{Array.from({ length: rows }, () => (isCurrent ? '▌' : ' ')).join('\n')}</Text>
-                    {thumb?.node && clickable($.ui.resolve(e), PANE, `thumb:${t.page}`, thumb.node, thumb.size, { kind: 'page', page: t.page })}
+                    {thumb?.node && clickable($, e, PANE, `thumb:${t.page}`, thumb.node, thumb.size, { kind: 'page', page: t.page })}
                   </Box>
                 )
               })}
@@ -865,7 +895,7 @@ async function previewCard($: EngineInterface, e: RenderInput<'ToolResult'>, id:
       </Box>
       {value.caption && <Text dimColor italic wrap="truncate-end">{value.caption}</Text>}
       <Box justifyContent="center">
-        {shown && clickable($.ui.resolve(e), e.requestId, `${at}pic`, shown, box, { kind: 'open', source: value.source })}
+        {shown && clickable($, e, e.requestId, `${at}pic`, shown, box, { kind: 'open', source: value.source })}
       </Box>
       {probe.blocked && overlay.state !== 'live' && (
         <Text dimColor wrap="wrap">Block preview: {probe.blocked.why} {probe.blocked.fix}</Text>

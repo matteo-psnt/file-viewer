@@ -4,34 +4,17 @@ import type { Blocked } from './deny.ts'
 import { formatOf, nameOf, pageLabel, type ImagePreview } from './files.ts'
 import { clickTargets, type ClickTarget } from './session.ts'
 
-// A picture under a layer that performs `target` (opening a file or turning
-// to a page) when clicked.
-export function clickable(
-  { Box, Client }: Elements['terminal'],
-  requestId: string,
-  key: string,
-  node: ReturnType<Elements['terminal']['Box']>,
-  box: { columns: number; rows: number },
-  target: ClickTarget,
-) {
+// Records what a click on a picture's layer does (opening a file or turning
+// to a page) and returns the layer's key. The layer itself is drawn beside
+// the $ calls, in register.tsx.
+export function clickLayer(requestId: string, key: string, target: ClickTarget) {
   const layer = `click:${key}`
   clickTargets.set(`${requestId}\u0000${layer}`, target)
   if (clickTargets.size > 500) {
     clickTargets.delete(clickTargets.keys().next().value!)
   }
 
-  // The layer holds the room and the picture is laid over it. An absolute Box
-  // is painted over what comes before it, but the pointer on it is on its
-  // parent, so a click falls through the picture to the layer beneath. (The
-  // other way round, the layer in the absolute Box never heard a click.)
-  return (
-    <Box key={`wrap:${key}`} width={box.columns} height={box.rows}>
-      <Client key={layer} module="./click.tsx" width={box.columns} height={box.rows} />
-      <Box position="absolute" top={0} left={0} width={box.columns} height={box.rows}>
-        {node}
-      </Box>
-    </Box>
-  )
+  return layer
 }
 
 // Drawn in place of the picture where the terminal can't show one: why, what

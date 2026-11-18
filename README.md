@@ -96,6 +96,23 @@ In the viewer, `↑`/`↓` or `p`/`n` turn pages, `o` opens the file in its own 
 
 Everything runs on your machine, and the plugin never uploads your files. See [PRIVACY.md](PRIVACY.md).
 
+## What it runs, reads, writes and sends
+
+**Programs.** Turning a file into a picture runs local converters with the file's path as an argument, through the scripts in `plugin/scripts/`:
+
+- `render.sh`: `sips` and `qlmanage` on macOS, ImageMagick (`magick` or `convert`), poppler (`pdftoppm`, `pdfinfo`, `pdfseparate`, `pdfunite`), `rsvg-convert`, LibreOffice (`soffice`) for Office files and `unzip` for iWork previews. Without LibreOffice on macOS, Quick Look's HTML is printed to a PDF by a headless Chrome, Chromium, Edge or Brave that loads only that local file.
+- `cells.sh` (ImageMagick or `sips`) scales a page for the coloured-block preview, `jpeg.sh` (`sips` or ImageMagick) makes the smaller JPEG the desktop app shows, and `cell.sh` (`ps`, `perl`) asks the terminal its size in pixels to measure a character cell.
+- `open.sh` opens a file in its own app with `open`, `wslview` or `xdg-open` when you press "open".
+- In iTerm2 only, `iterm_overlay.py` (`python3`) uses iTerm2's local Python API to lay real pictures over the block previews.
+
+**What it reads.** The files you or Claude ask to preview, and the environment variables `TERM_PROGRAM`, `ITERM_SESSION_ID`, `SSH_CONNECTION`, `SSH_TTY` and `WSL_DISTRO_NAME`, to choose how pictures reach the terminal. None of these are credentials, and none leave your machine.
+
+**What it writes.** Rendered pages go to a cache only you can read (`~/Library/Caches/claude-file-viewer` on macOS, `$XDG_CACHE_HOME/claude-file-viewer` elsewhere), along with the overlay's notes in its `overlays/` folder. Anything unused for 30 days is deleted. It writes nothing else.
+
+**What it sends.** Nothing over the network. Pictures go only to your terminal, and to the Claude Code desktop app or editor when you use those.
+
+**Hooks.** The plugin adds the `preview` tool and its own `/view` command, and answers calls of its own `preview` tool. It draws its own tool results, the viewer pane and a preview under a file Claude sends you (leaving that tool's own result as it was), keeps the arrow keys on the viewer's thumbnails while the viewer has focus, and opens a file or turns a page when you click a picture. It does not read or change other tools' calls, your settings or your instructions.
+
 The plugin API this uses is in early access, so a Claude Code update can break it.
 
 ## License

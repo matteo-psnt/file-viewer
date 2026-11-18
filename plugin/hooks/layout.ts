@@ -17,6 +17,22 @@ export function boxFor(
   return { columns, rows: Math.max(1, Math.min(rows, 255)) }
 }
 
+// Rows an inline card spends outside its picture (border, header, caption,
+// buttons) plus what stays on screen below it (prompt, status line).
+export const INLINE_CHROME = 16
+
+// The most rows an inline picture may take. A card taller than the terminal
+// scrolls its top away, and the terminal then draws the whole picture from the
+// first row still on screen, so its bottom spills out under the card. Unknown
+// height: the size's cap alone.
+export function inlineMaxRows(cap: number, viewportRows: number | undefined) {
+  if (viewportRows === undefined || viewportRows <= 0) {
+    return cap
+  }
+
+  return Math.max(6, Math.min(cap, viewportRows - INLINE_CHROME))
+}
+
 export const SIDEBAR = 5
 
 // The pages around `page` that the viewer's sidebar shows, centred on it.

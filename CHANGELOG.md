@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.0](https://github.com/matteo-psnt/file-viewer/compare/v0.3.0...v0.4.0) (2026-11-18)
+
+
+### Features
+
+* turn pages by clicking a viewer thumbnail ([320573f](https://github.com/matteo-psnt/file-viewer/commit/320573f0d91fa0f2f5441c5d665bd3a338b93331))
+* **viewer:** go to a typed page, and fix picture clicks and mixed page sizes ([#8](https://github.com/matteo-psnt/file-viewer/issues/8)) ([fae4275](https://github.com/matteo-psnt/file-viewer/commit/fae427590f47ae7683899b0f0245129f35682d94))
+
+
+### Bug Fixes
+
+* keep a tall inline preview inside its card ([#9](https://github.com/matteo-psnt/file-viewer/issues/9)) ([1314d40](https://github.com/matteo-psnt/file-viewer/commit/1314d40f066400edfee8d7d1f5a26d6275d85f6d))
+
 ## [0.3.0](https://github.com/matteo-psnt/file-viewer/compare/v0.2.0...v0.3.0) (2026-10-19)
 
 

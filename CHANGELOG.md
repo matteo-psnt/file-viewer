@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/matteo-psnt/file-viewer/compare/v0.4.0...v0.4.1) (2026-11-18)
+
+
+### Bug Fixes
+
+* write viewer state changes and the click layer in forms the directory reads ([#10](https://github.com/matteo-psnt/file-viewer/issues/10)) ([d404e6c](https://github.com/matteo-psnt/file-viewer/commit/d404e6cb5132ace5edb6562f43aef2c43d58d39c))
+
 ## [0.4.0](https://github.com/matteo-psnt/file-viewer/compare/v0.3.0...v0.4.0) (2026-11-18)
 
 

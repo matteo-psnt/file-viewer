@@ -19,7 +19,7 @@ import {
   WIDTH,
   type ImagePreview,
 } from './files.ts'
-import { boxFor, cellRatioOf, footerHints, sidebarPages } from './layout.ts'
+import { boxFor, cellRatioOf, footerHints, inlineMaxRows, sidebarPages } from './layout.ts'
 import {
   animations,
   bytesOf,
@@ -837,7 +837,8 @@ async function previewCard($: EngineInterface, e: RenderInput<'ToolResult'>, id:
   }
 
   const columns = (e.viewport?.columns ?? 100) - 10
-  const box = boxFor(value, columns, value.size === 'small' ? 16 : 36, WIDTH[value.size ?? 'medium'], cell.ratio)
+  const maxRows = inlineMaxRows(value.size === 'small' ? 16 : 36, e.viewport?.rows)
+  const box = boxFor(value, columns, maxRows, WIDTH[value.size ?? 'medium'], cell.ratio)
   const shown = await picture($, e, {
     key: `${at}pic`,
     png: value.png,

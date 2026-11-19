@@ -452,11 +452,16 @@ async function picture($: EngineInterface, e: Parameters<EngineInterface['ui']['
 }
 
 // A picture under a layer that performs `target` (opening a file or turning
-// to a page) when clicked. The layer holds the room and the picture is laid
-// over it. An absolute Box is painted over what comes before it, but the
-// pointer on it is on its parent, so a click falls through the picture to the
-// layer beneath. (The other way round, the layer in the absolute Box never
-// heard a click.)
+// to a page) when clicked. Both stay in the flow: the picture takes the room
+// and the layer is pulled back up over it by a negative margin. The pointer
+// lands on the last child drawn there, so the layer hears the click, and the
+// layer draws nothing, so the picture shows through.
+//
+// Neither may be absolute. The renderer pins an absolute Box whose top has
+// scrolled above the screen to the first row, so a picture in one stopped at
+// the top while its card scrolled on: the page drew from its first row again
+// and spilled out below the card. And the pointer on an absolute Box is on its
+// parent, so a layer in one never hears a click.
 function clickable(
   $: EngineInterface,
   e: RenderInput<'Pane', 'terminal'> | RenderInput<'ToolResult', 'terminal'>,
@@ -470,10 +475,12 @@ function clickable(
   const layer = clickLayer(requestId, key, target)
 
   return (
-    <Box key={`wrap:${key}`} width={box.columns} height={box.rows}>
-      <Client key={layer} module="./click.tsx" width={box.columns} height={box.rows} />
-      <Box position="absolute" top={0} left={0} width={box.columns} height={box.rows}>
+    <Box key={`wrap:${key}`} flexDirection="column" width={box.columns} height={box.rows}>
+      <Box width={box.columns} height={box.rows} flexShrink={0}>
         {node}
+      </Box>
+      <Box width={box.columns} height={box.rows} flexShrink={0} marginTop={-box.rows}>
+        <Client key={layer} module="./click.tsx" width={box.columns} height={box.rows} />
       </Box>
     </Box>
   )
@@ -895,7 +902,16 @@ async function previewCard($: EngineInterface, e: RenderInput<'ToolResult'>, id:
       </Box>
       {value.caption && <Text dimColor italic wrap="truncate-end">{value.caption}</Text>}
       <Box justifyContent="center">
-        {shown && clickable($, e, e.requestId, `${at}pic`, shown, box, { kind: 'open', source: value.source })}
+        {shown &&
+          clickable(
+            $,
+            e,
+            e.requestId,
+            `${at}pic`,
+            shown,
+            box,
+            isPaged ? { kind: 'viewer', preview: value } : { kind: 'open', source: value.source },
+          )}
       </Box>
       {probe.blocked && overlay.state !== 'live' && (
         <Text dimColor wrap="wrap">Block preview: {probe.blocked.why} {probe.blocked.fix}</Text>
@@ -1125,13 +1141,16 @@ export const register: Register = (on, options: PluginOptions) => {
     return (await drawPane($, e)) ?? next(e)
   })
 
-  // A click on a picture opens its file in the file's own app; a click on a
-  // viewer thumbnail turns to that page instead.
+  // A click on a picture opens its file in the file's own app; on an inline
+  // page of a file of several, it opens the viewer on that page; on a viewer
+  // thumbnail, it turns to that page.
   on('ui.message', async ($, e, next) => {
     const target = clickTargets.get(`${e.requestId}\u0000${e.element}`)
     if ((e.data as { open?: unknown } | undefined)?.open === true && target !== undefined) {
       if (target.kind === 'open') {
         openExternally($, target.source)
+      } else if (target.kind === 'viewer') {
+        void openViewer($, target.preview).catch(() => undefined)
       } else {
         const state = await getViewer($)
         if (state !== null) {

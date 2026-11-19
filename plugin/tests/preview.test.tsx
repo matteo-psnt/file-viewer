@@ -168,6 +168,45 @@ test('clicking a thumbnail turns to its page', async ($, on) => {
   expect((await ui.find({ key: 'page:7' }))?.props).toMatchObject({ source: { file: '/c/p7.png' } })
 })
 
+test('clicking an inline page opens the viewer on that page', async ($, on) => {
+  mock.store(on)
+  on('fs.exists', () => ({ value: true }))
+  const opened: string[] = []
+  on('process.run', (_$, e) => {
+    if (e.argv[1]?.endsWith('open.sh')) {
+      opened.push(e.argv[2] ?? '')
+    }
+    return page(Number(e.argv[3]))
+  })
+  const panes: string[] = []
+  on('ui.open', (_$, e) => {
+    panes.push(e.id)
+    return { value: { isPlaced: true } }
+  })
+  on('ui.focus', () => ({}))
+
+  await $.tool.call({ tool: 'mcp__file-viewer__preview', tool_use_id: 'd1', path: '/notes/deck.pptx', page: 3 })
+  const card = await $.ui.mount({
+    plugin: 'file-viewer', surface: 'terminal', component: 'ToolResult', requestId: 'd1', props: result('d1', ''),
+  })
+  await card.press({ key: 'next' })
+  await card.resize({ columns: 64, rows: 32, in: 'click:pic' })
+  await card.pointer({ type: 'down', x: 1, y: 1, button: 'left', in: 'click:pic' })
+  await card.pointer({ type: 'up', x: 1, y: 1, button: 'left', in: 'click:pic' })
+  expect(panes).toEqual(['file-viewer'])
+  expect(opened).toEqual([])
+
+  const pane = await $.ui.mount({
+    plugin: 'file-viewer',
+    surface: 'terminal',
+    component: 'Pane',
+    requestId: 'file-viewer',
+    viewport: { columns: 140, rows: 50 },
+    props: { title: 'Viewer', isFocused: true, bodyColumns: 130, placement: 'inline' } as never,
+  })
+  expect((await pane.find({ key: 'page:4' }))?.props).toMatchObject({ source: { file: '/c/p4.png' } })
+})
+
 test('the viewer goes to a typed page', async ($, on) => {
   mock.store(on)
   mock.clock(on)

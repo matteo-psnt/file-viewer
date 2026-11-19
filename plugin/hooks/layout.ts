@@ -53,10 +53,8 @@ export function boxFor(
 // buttons) plus what stays on screen below it (prompt, status line).
 export const INLINE_CHROME = 16
 
-// The most rows an inline picture may take. A card taller than the terminal
-// scrolls its top away, and the terminal then draws the whole picture from the
-// first row still on screen, so its bottom spills out under the card. Unknown
-// height: the size's cap alone.
+// The most rows an inline picture may take, so the whole card fits on screen
+// with the prompt below it. Unknown height: the size's cap alone.
 export function inlineMaxRows(cap: number, viewportRows: number | undefined) {
   if (viewportRows === undefined || viewportRows <= 0) {
     return cap

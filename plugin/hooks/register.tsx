@@ -902,7 +902,16 @@ async function previewCard($: EngineInterface, e: RenderInput<'ToolResult'>, id:
       </Box>
       {value.caption && <Text dimColor italic wrap="truncate-end">{value.caption}</Text>}
       <Box justifyContent="center">
-        {shown && clickable($, e, e.requestId, `${at}pic`, shown, box, { kind: 'open', source: value.source })}
+        {shown &&
+          clickable(
+            $,
+            e,
+            e.requestId,
+            `${at}pic`,
+            shown,
+            box,
+            isPaged ? { kind: 'viewer', preview: value } : { kind: 'open', source: value.source },
+          )}
       </Box>
       {probe.blocked && overlay.state !== 'live' && (
         <Text dimColor wrap="wrap">Block preview: {probe.blocked.why} {probe.blocked.fix}</Text>
@@ -1132,13 +1141,16 @@ export const register: Register = (on, options: PluginOptions) => {
     return (await drawPane($, e)) ?? next(e)
   })
 
-  // A click on a picture opens its file in the file's own app; a click on a
-  // viewer thumbnail turns to that page instead.
+  // A click on a picture opens its file in the file's own app; on an inline
+  // page of a file of several, it opens the viewer on that page; on a viewer
+  // thumbnail, it turns to that page.
   on('ui.message', async ($, e, next) => {
     const target = clickTargets.get(`${e.requestId}\u0000${e.element}`)
     if ((e.data as { open?: unknown } | undefined)?.open === true && target !== undefined) {
       if (target.kind === 'open') {
         openExternally($, target.source)
+      } else if (target.kind === 'viewer') {
+        void openViewer($, target.preview).catch(() => undefined)
       } else {
         const state = await getViewer($)
         if (state !== null) {

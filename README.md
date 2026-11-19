@@ -71,7 +71,7 @@ The helper runs only in iTerm2, only while pictures would otherwise be blocks, a
 
 If you've set `CLAUDE_CODE_FORCE_TERMINAL_IMAGES` and a terminal you also use can't draw pictures, Claude Code sends them anyway and you get blank cards or stray characters. Leave the setting out to get blocks there.
 
-Click a picture to open the file in its own app. Over ssh and under WSL the plugin sends picture bytes instead of file paths; if that guess is wrong, change "Image transport" in `/config`.
+Click a picture to open the file in its own app. On a page of a deck or PDF shown inline, a click opens the viewer on that page instead, and in the viewer a click on a thumbnail turns to it. Over ssh and under WSL the plugin sends picture bytes instead of file paths; if that guess is wrong, change "Image transport" in `/config`.
 
 ## What it opens
 

@@ -2,6 +2,7 @@ import type { Timer } from 'claude-code'
 
 import { MARKER_CELLS } from './blocks.ts'
 import type { Blocked } from './deny.ts'
+import type { ImagePreview } from './files.ts'
 
 // What this load of the plugin holds between hooks: the probe's verdict, how
 // pictures travel, the iTerm2 helper's state, running animations and caches.
@@ -61,7 +62,10 @@ export type Draw = { key: string; png: string; columns: number; rows: number; al
 
 // What a click on a picture does, by the drawing and the click layer's key:
 // the layer's message carries no payload, so nothing it sends picks this.
-export type ClickTarget = { kind: 'open'; source: string } | { kind: 'page'; page: number }
+export type ClickTarget =
+  | { kind: 'open'; source: string }
+  | { kind: 'page'; page: number }
+  | { kind: 'viewer'; preview: ImagePreview }
 export const clickTargets = new Map<string, ClickTarget>()
 
 // The viewer's latest page turn: a slower render of an earlier turn (a page

@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.0](https://github.com/matteo-psnt/file-viewer/compare/v0.4.1...v0.5.0) (2026-11-19)
+
+
+### Features
+
+* open the viewer on the page when an inline page is clicked ([3a975d2](https://github.com/matteo-psnt/file-viewer/commit/3a975d2a1c0e9d68aecf43476527993cc377f020))
+
+
+### Bug Fixes
+
+* scroll a picture's top off the screen instead of pinning it ([3a975d2](https://github.com/matteo-psnt/file-viewer/commit/3a975d2a1c0e9d68aecf43476527993cc377f020))
+
 ## [0.4.1](https://github.com/matteo-psnt/file-viewer/compare/v0.4.0...v0.4.1) (2026-11-18)
 
 
